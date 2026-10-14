@@ -25,7 +25,7 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose }: {
 	const { data: display = initialDisplay } = useDeviceQuery<DisplayState>(serverUrl, '/api/display-state?display=0', 500);
 	const control = useControlConnection(serverUrl, audio.refreshVolume);
 	const input = useEmulatorInput(display, control.send);
-	const fileDrop = useFileDrop(serverUrl);
+	const fileDrop = useFileDrop();
 	return <div {...fileDrop.rootProps} className="app" onPointerDownCapture={audio.resume} onKeyDownCapture={audio.resume}>
 		<input {...fileDrop.inputProps} />
 		<Header title={session.deviceName || 'Emulator Loaded'} loaded debugVisible={debugVisible}

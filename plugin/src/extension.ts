@@ -14,9 +14,10 @@ export function activate(context: vscode.ExtensionContext): void {
 	const bitRate = configuration.get<number>('bitRate', 10000000);
 	const discover = () => listTargets(emulatorPath, adbPath, output);
 	let session: EmulatorSession;
-	const provider = new EmulatorViewProvider(context, discover, value => session.startTarget(value), () => session.stop());
+	const provider = new EmulatorViewProvider(context, discover, value => session.startTarget(value), () => session.stop(),
+		() => session.deviceSerial, (file, name, serial, signal, progress) => session.pushFile(file, name, serial, signal, progress), output);
 	session = new EmulatorSession(context.extensionPath, adbPath, emulatorPath, bitRate, output, provider);
-	shutdownExtension = () => session.stop();
+	shutdownExtension = async () => {await provider.cancelUploads(); await session.stop();};
 
 	context.subscriptions.push(
 		output,
@@ -30,8 +31,8 @@ export function activate(context: vscode.ExtensionContext): void {
 				await session.startTarget(chosen.value);
 			}
 		}),
-		vscode.commands.registerCommand('valdroid-emulator.stop', () => session.stop()),
-		{ dispose: () => { void session.stop(); } },
+		vscode.commands.registerCommand('valdroid-emulator.stop', shutdownExtension),
+		{ dispose: () => { void shutdownExtension?.(); } },
 	);
 }
 

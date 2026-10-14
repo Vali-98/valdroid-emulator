@@ -16,7 +16,7 @@ export interface TransferNotice {
 	finishedAt?: number;
 }
 
-export function useFileTransfer(serverUrl: string) {
+export function useFileTransfer() {
 	const activeRef = React.useRef<AbortController | undefined>(undefined);
 	const [progress, setProgress] = React.useState({ message: '', percent: 0 });
 	const [dropError, setDropError] = React.useState('');
@@ -26,7 +26,7 @@ export function useFileTransfer(serverUrl: string) {
 				if (controller.signal.aborted) {throw new Error('Upload canceled');}
 				const message = `Sending ${file.name}${files.length > 1 ? ` (${index + 1}/${files.length})` : ''}`;
 				setProgress({ message, percent: 0 });
-				await uploadFile(serverUrl, file, controller.signal, percent => {
+				await uploadFile(file, controller.signal, percent => {
 					if (!controller.signal.aborted) {setProgress({ message, percent });}
 				});
 			}

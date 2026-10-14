@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
@@ -41,60 +40,3 @@ func TestDeviceVolumeHandler(t *testing.T) {
 	}
 }
 
-func TestDeviceUploadHandler(t *testing.T) {
-	var pushed bool
-	api := deviceAPI{adbPath: "adb", serial: "emulator-5554", command: func(_ context.Context, _ string, args ...string) ([]byte, error) {
-		if len(args) >= 5 && args[2] == "push" {
-			data, err := os.ReadFile(args[3])
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(data) != "file contents" || args[4] != "/sdcard/Download/report.txt" {
-				t.Fatalf("unexpected ADB push: %v, data=%q", args, data)
-			}
-			pushed = true
-		}
-		return nil, nil
-	}}
-	request := httptest.NewRequest(http.MethodPost, "/api/upload?name=report.txt", strings.NewReader("file contents"))
-	request.RemoteAddr = "127.0.0.1:1234"
-	response := httptest.NewRecorder()
-	api.uploadHandler(response, request)
-	if response.Code != http.StatusOK || !pushed {
-		t.Fatalf("upload status = %d, pushed = %t: %s", response.Code, pushed, response.Body.String())
-	}
-	var result map[string]string
-	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
-		t.Fatal(err)
-	}
-	if result["path"] != "/sdcard/Download/report.txt" {
-		t.Fatalf("unexpected path: %v", result)
-	}
-}
-
-func TestDeviceUploadRejectsInvalidRequests(t *testing.T) {
-	api := deviceAPI{serial: "emulator-5554"}
-	for _, test := range []struct {
-		name       string
-		remoteAddr string
-		origin     string
-		status     int
-	}{
-		{"../escape.txt", "127.0.0.1:1234", "", http.StatusBadRequest},
-		{"folder\\escape.txt", "127.0.0.1:1234", "", http.StatusBadRequest},
-		{"safe.txt", "192.0.2.1:1234", "", http.StatusForbidden},
-		{"safe.txt", "127.0.0.1:1234", "https://other.example", http.StatusForbidden},
-	} {
-		request := httptest.NewRequest(http.MethodPost, "/api/upload?name="+test.name, strings.NewReader("data"))
-		request.RemoteAddr = test.remoteAddr
-		request.Header.Set("Origin", test.origin)
-		response := httptest.NewRecorder()
-		api.uploadHandler(response, request)
-		if response.Code != test.status {
-			t.Errorf("%q: status = %d, want %d", test.name, response.Code, test.status)
-		}
-	}
-	if _, err := uploadName("bad\x00name"); err == nil {
-		t.Fatal("NUL filename was accepted")
-	}
-}

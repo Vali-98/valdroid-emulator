@@ -2,8 +2,8 @@ import { useDropzone } from 'react-dropzone';
 import { filesFromEvent } from '../files';
 import { useFileTransfer } from './useFileTransfer';
 
-export function useFileDrop(serverUrl: string) {
-	const transfer = useFileTransfer(serverUrl);
+export function useFileDrop() {
+	const transfer = useFileTransfer();
 	const dropzone = useDropzone({
 		disabled: transfer.pending,
 		noClick: true,

@@ -1,20 +1,28 @@
 import * as vscode from 'vscode';
 import type { EmulatorTarget, ExtensionMessage, HostMessage, SessionState } from '../shared/protocol';
 import { webviewHtml } from './html';
+import { FileUploadReceiver, type PushFile } from '../lib/FileUploadReceiver';
 
 export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
 	private serverUrl?: string;
 	private deviceName?: string;
+	private uploads?: FileUploadReceiver;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
 		private readonly listTargets: () => Promise<EmulatorTarget[]>,
 		private readonly startTarget: (value: string) => Promise<void>,
 		private readonly stopEmulator: () => Promise<void>,
+		private readonly getSerial: () => string | undefined,
+		private readonly pushFile: PushFile,
+		private readonly output: vscode.OutputChannel,
 	) {}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
+		void this.uploads?.dispose();
+		const uploads = new FileUploadReceiver(this.getSerial, this.pushFile);
+		this.uploads = uploads;
 		this.view = webviewView;
 		webviewView.webview.options = {
 			enableScripts: true,
@@ -26,6 +34,19 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		webviewView.webview.html = webviewHtml(webviewView.webview, this.context.extensionUri);
 		const messages = webviewView.webview.onDidReceiveMessage(async (message: HostMessage) => {
 			try {
+				if (message.type === 'upload-start' || message.type === 'upload-chunk' || message.type === 'upload-finish' || message.type === 'upload-cancel') {
+					try {
+						const path = await uploads.handle(message, percent => {
+							void webviewView.webview.postMessage({ type: 'upload-progress', id: message.id, percent } satisfies ExtensionMessage);
+						});
+						void webviewView.webview.postMessage({ type: 'upload-result', id: message.id, requestId: message.requestId, path } satisfies ExtensionMessage);
+					} catch (error) {
+						const detail = error instanceof Error ? error.message : String(error);
+						this.output.appendLine(`File transfer failed: ${detail}`);
+						void webviewView.webview.postMessage({ type: 'upload-result', id: message.id, requestId: message.requestId, error: detail } satisfies ExtensionMessage);
+					}
+					return;
+				}
 				switch (message.type) {
 					case 'ready':
 						await this.refreshTargets();
@@ -42,6 +63,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 						break;
 					case 'stop':
 					case 'close':
+						await uploads.cancelAll();
 						await this.stopEmulator();
 						this.setServer(undefined);
 						break;
@@ -51,6 +73,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 			}
 		});
 		webviewView.onDidDispose(() => {
+			void uploads.dispose();
 			messages.dispose();
 			if (this.view === webviewView) {this.view = undefined;}
 		});
@@ -62,10 +85,13 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	setServer(serverUrl?: string, deviceName?: string): void {
+		if (this.serverUrl !== serverUrl) {void this.uploads?.cancelAll();}
 		this.serverUrl = serverUrl;
 		this.deviceName = serverUrl ? deviceName : undefined;
 		this.postStatus();
 	}
+
+	async cancelUploads(): Promise<void> {await this.uploads?.cancelAll();}
 
 	setStatus(status: string, state: SessionState): void {
 		this.postMessage({ type: 'status', status, state, serverUrl: this.serverUrl, deviceName: this.deviceName });

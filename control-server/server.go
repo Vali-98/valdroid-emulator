@@ -207,7 +207,6 @@ func main() {
 	mux.HandleFunc("/api/display-state", displayStateHandler)
 	mux.HandleFunc("/api/status", serverStatusHandler)
 	mux.HandleFunc("/api/volume", device.volumeHandler)
-	mux.HandleFunc("/api/upload", device.uploadHandler)
 
 	go startTCP(socketListener)
 	shutdownContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
