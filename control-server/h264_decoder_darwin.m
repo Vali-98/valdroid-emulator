@@ -2,6 +2,7 @@
 #include <CoreMedia/CoreMedia.h>
 #include <CoreVideo/CoreVideo.h>
 #include <VideoToolbox/VideoToolbox.h>
+#include <Accelerate/Accelerate.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -105,6 +106,7 @@ int vt_decoder_decode(VTDecoder* decoder, const uint8_t* data, size_t size, int6
   }
 
   VTDecodeInfoFlags info = 0;
+  // Zero flags keep decoding synchronous while data points into Go-owned memory.
   status = VTDecompressionSessionDecodeFrame(decoder->session, sample, 0, NULL, &info);
   CFRelease(sample);
   if (status != noErr || decoder->callback_status != noErr) {
@@ -128,9 +130,10 @@ int vt_decoder_decode(VTDecoder* decoder, const uint8_t* data, size_t size, int6
     CVPixelBufferUnlockBaseAddress(frame, kCVPixelBufferLock_ReadOnly);
     return -1;
   }
-  for (size_t row = 0; row < frame_height; ++row) {
-    memcpy(copy + row * frame_width * 4, base + row * row_bytes, frame_width * 4);
-  }
+  vImage_Buffer source = {base, frame_height, frame_width, row_bytes};
+  vImage_Buffer destination = {copy, frame_height, frame_width, frame_width * 4};
+  const uint8_t channels[] = {2, 1, 0, 3};
+  vImagePermuteChannels_ARGB8888(&source, &destination, channels, kvImageDoNotTile);
   CVPixelBufferUnlockBaseAddress(frame, kCVPixelBufferLock_ReadOnly);
   *pixels = copy;
   *width = (int)frame_width;

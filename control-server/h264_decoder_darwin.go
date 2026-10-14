@@ -3,7 +3,7 @@
 package main
 
 /*
-#cgo LDFLAGS: -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework CoreFoundation
+#cgo LDFLAGS: -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework CoreFoundation -framework Accelerate
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -26,6 +26,7 @@ import (
 
 type h264Decoder struct {
 	decoder *C.VTDecoder
+	packet  []byte
 }
 
 func newH264Decoder(sps, pps []byte, width, height int, orientation uint8) (*h264Decoder, error) {
@@ -43,26 +44,17 @@ func newH264Decoder(sps, pps []byte, width, height int, orientation uint8) (*h26
 }
 
 func (d *h264Decoder) decode(nalus [][]byte, timestamp time.Duration) (*image.RGBA, error) {
-	var packet []byte
-	for _, nalu := range nalus {
-		if len(nalu) == 0 {
-			continue
-		}
-		packet = append(packet, byte(len(nalu)>>24), byte(len(nalu)>>16), byte(len(nalu)>>8), byte(len(nalu)))
-		packet = append(packet, nalu...)
-	}
+	packet := packNALUs(d.packet, nalus, false)
+	d.packet = packet
 	if len(packet) == 0 {
 		return nil, nil
 	}
-
-	packetMemory := C.CBytes(packet)
-	defer C.free(packetMemory)
 
 	var pixels *C.uint8_t
 	var width, height C.int
 	result := C.vt_decoder_decode(
 		d.decoder,
-		(*C.uint8_t)(packetMemory),
+		(*C.uint8_t)(unsafe.Pointer(&packet[0])),
 		C.size_t(len(packet)),
 		C.int64_t(timestamp/time.Microsecond),
 		&pixels,
@@ -77,20 +69,7 @@ func (d *h264Decoder) decode(nalus [][]byte, timestamp time.Duration) (*image.RG
 	}
 	defer C.vt_decoder_free_buffer(pixels)
 
-	frameWidth, frameHeight := int(width), int(height)
-	bgra := C.GoBytes(unsafe.Pointer(pixels), C.int(frameWidth*frameHeight*4))
-	frame := image.NewRGBA(image.Rect(0, 0, frameWidth, frameHeight))
-	for y := 0; y < frameHeight; y++ {
-		for x := 0; x < frameWidth; x++ {
-			source := (y*frameWidth + x) * 4
-			destination := y*frame.Stride + x*4
-			frame.Pix[destination] = bgra[source+2]
-			frame.Pix[destination+1] = bgra[source+1]
-			frame.Pix[destination+2] = bgra[source]
-			frame.Pix[destination+3] = bgra[source+3]
-		}
-	}
-	return frame, nil
+	return copyDecodedFrame(unsafe.Pointer(pixels), int(width), int(height)), nil
 }
 
 func (d *h264Decoder) close() {

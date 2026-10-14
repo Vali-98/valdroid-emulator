@@ -53,7 +53,18 @@ Run `./package-jar.sh` to build the agent and package the complete APK archive u
 
 ## Tests
 
+For an optional faster JPEG encoder on Linux/Windows (also supported on macOS), install `libjpeg-turbo` development headers/libraries and `pkg-config`, then build/test with the `turbojpeg` tag:
+
+```sh
+make server GO_TAGS=turbojpeg
+make test GO_TAGS=turbojpeg
+```
+
+Homebrew provides `jpeg-turbo` and `pkg-config`; Debian/Ubuntu provide `libturbojpeg0-dev` and `pkg-config`. Windows requires a matching MinGW libturbojpeg installation with a `libturbojpeg.pc` discoverable by `pkg-config`. Dynamically linked turbo builds require the library on the target host; the default macOS build uses system frameworks only.
+
 ```sh
 go test -race ./...
 go vet ./...
 ```
+
+Run `make benchmark` for encoder benchmarks and `make frameprobe` for the stream consistency probe. See [PERFORMANCE.md](PERFORMANCE.md) for live and replay scenarios.

@@ -295,9 +295,9 @@ int mf_decoder_decode(MFDecoder* decoder, const uint8_t* data, size_t size, int6
         }
       }
       size_t destination = (static_cast<size_t>(row) * decoder->width + column) * 4;
-      copy[destination] = static_cast<uint8_t>(min(255, max(0, blue)));
+      copy[destination] = static_cast<uint8_t>(min(255, max(0, red)));
       copy[destination + 1] = static_cast<uint8_t>(min(255, max(0, green)));
-      copy[destination + 2] = static_cast<uint8_t>(min(255, max(0, red)));
+      copy[destination + 2] = static_cast<uint8_t>(min(255, max(0, blue)));
       copy[destination + 3] = 255;
     }
   }

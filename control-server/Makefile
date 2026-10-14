@@ -11,18 +11,26 @@ HOST_TARGET := $(GOOS)-$(GOARCH)
 SERVER_EXT := $(if $(filter windows,$(GOOS)),.exe,)
 SERVER_BINARY := control-server-$(HOST_TARGET)$(SERVER_EXT)
 PLUGIN_BUNDLE := ../plugin/bundle/$(HOST_TARGET)
+GO_TAGS ?=
 
-.PHONY: all test server agent plugin-bundle clean
+.PHONY: all test benchmark frameprobe server agent plugin-bundle clean
 
 all: test server agent plugin-bundle
 
 test:
-	go test -race ./...
-	go vet ./...
+	go test -race -tags '$(GO_TAGS)' ./...
+	go vet -tags '$(GO_TAGS)' ./...
+
+benchmark:
+	go test -tags '$(GO_TAGS)' -run '^$$' -bench JPEG -benchmem -count 3 .
+
+frameprobe:
+	@mkdir -p $(DIST)
+	go build -o $(DIST)/frameprobe ./cmd/frameprobe
 
 server:
 	@mkdir -p $(DIST)
-	CGO_ENABLED=1 go build -o $(DIST)/$(SERVER_BINARY) .
+	CGO_ENABLED=1 go build -tags '$(GO_TAGS)' -o $(DIST)/$(SERVER_BINARY) .
 
 agent:
 	cd $(AGENT_PROJECT) && bash ./gradlew :app:assembleDebug
@@ -44,6 +52,7 @@ plugin-bundle: server agent
 	cp -R $(DIST)/agent-libs $(PLUGIN_BUNDLE)/agent-libs
 
 clean:
+	rm -f $(DIST)/frameprobe
 	rm -f $(DIST)/control-server-* $(DIST)/control-server-*.exe $(DIST)/screen-sharing-agent.jar
 	rm -rf $(DIST)/agent-libs
 	rm -rf $(PLUGIN_BUNDLE)

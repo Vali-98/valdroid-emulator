@@ -26,6 +26,7 @@ import (
 
 type h264Decoder struct {
 	decoder *C.LinuxDecoder
+	packet  []byte
 }
 
 func newH264Decoder(sps, pps []byte, width, height int, orientation uint8) (*h264Decoder, error) {
@@ -43,25 +44,17 @@ func newH264Decoder(sps, pps []byte, width, height int, orientation uint8) (*h26
 }
 
 func (d *h264Decoder) decode(nalus [][]byte, timestamp time.Duration) (*image.RGBA, error) {
-	var packet []byte
-	for _, nalu := range nalus {
-		if len(nalu) == 0 {
-			continue
-		}
-		packet = append(packet, 0, 0, 0, 1)
-		packet = append(packet, nalu...)
-	}
+	packet := packNALUs(d.packet, nalus, true)
+	d.packet = packet
 	if len(packet) == 0 {
 		return nil, nil
 	}
 
-	packetMemory := C.CBytes(packet)
-	defer C.free(packetMemory)
 	var pixels *C.uint8_t
 	var width, height C.int
 	result := C.linux_decoder_decode(
 		d.decoder,
-		(*C.uint8_t)(packetMemory),
+		(*C.uint8_t)(unsafe.Pointer(&packet[0])),
 		C.size_t(len(packet)),
 		C.int64_t(timestamp/time.Microsecond),
 		&pixels,
@@ -76,13 +69,7 @@ func (d *h264Decoder) decode(nalus [][]byte, timestamp time.Duration) (*image.RG
 	}
 	defer C.linux_decoder_free_buffer(pixels)
 
-	frameWidth, frameHeight := int(width), int(height)
-	pixelBytes := C.GoBytes(unsafe.Pointer(pixels), C.int(frameWidth*frameHeight*4))
-	return &image.RGBA{
-		Pix:    pixelBytes,
-		Stride: frameWidth * 4,
-		Rect:   image.Rect(0, 0, frameWidth, frameHeight),
-	}, nil
+	return copyDecodedFrame(unsafe.Pointer(pixels), int(width), int(height)), nil
 }
 
 func (d *h264Decoder) close() {

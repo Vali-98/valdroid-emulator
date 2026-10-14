@@ -36,3 +36,24 @@ The server binds its HTTP and agent TCP listeners first, installs only changed a
 The standalone test page at `/` is disabled by default. Add `--test-webserver` when running the server manually to serve it. The VS Code extension does not use this flag. `/api/volume` reports the device's media volume. File transfers are handled by the VS Code extension host with `adb push` to `/sdcard/Download`; the server exposes no upload endpoint.
 
 AVC decode prerequisites by host are listed in [BUILDING.md](BUILDING.md).
+
+## Layout
+
+- `main.go`, `http.go`, `config.go`: listeners, routes, configuration, shutdown.
+- `agent.go`, `transport.go`, `status.go`: ADB startup, agent channels, readiness.
+- `video_protocol.go`: packet headers and AVC framing/parameter sets.
+- `video_pipeline.go`, `frame_memory.go`: decoding, owned pixel buffers, latest-frame JPEG worker.
+- `video_http.go`: display metadata, cached frames, bounded MJPEG subscribers.
+- `h264_decoder_*`, `jpeg_encoder_*`: platform codecs; macOS uses VideoToolbox and ImageIO by default.
+- `audio.go`, `control.go`, `device_api.go`: audio fanout, native input, media volume.
+- `performance.go`, `cmd/frameprobe`: bounded timing telemetry and repeatable pacing tests.
+
+Video queues retain only the newest pending frame. A slow encoder or viewer drops stale work instead of accumulating latency. Each pixel buffer has one owner until encoding completes; published JPEG bytes are immutable and shared between viewers. Slow HTTP writes time out without blocking capture or other viewers.
+
+## Performance
+
+`/api/performance?display=0` reports frame/drop/error counts and rolling mean/p50/p95/p99/max timings for decode, JPEG encoding, queueing, source cadence, arrival cadence, HTTP writes, and server residence. Counters are cumulative since server start; timing windows retain the latest 600 samples. Delivered-frame counts include all subscribers, not unique source frames.
+
+`--jpeg-quality` defaults to 95. macOS uses the system ImageIO encoder without additional runtime dependencies. Linux/Windows default to the portable Go encoder; build with `make server GO_TAGS=turbojpeg` to use SIMD-accelerated libjpeg-turbo when its development libraries and `pkg-config` are available. Lower JPEG quality can reduce CPU and bandwidth, but does not change the agent's AVC bit rate.
+
+See [PERFORMANCE.md](PERFORMANCE.md) for measurements, automated input, reproducible 60fps replay/live tests, and the limits of these latency measurements.
