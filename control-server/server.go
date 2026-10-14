@@ -3,9 +3,14 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"crypto/sha256"
+	"embed"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -15,6 +20,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -66,6 +74,18 @@ type serverStatus struct {
 	ControlConnected bool   `json:"controlConnected"`
 	VideoPackets     uint64 `json:"videoPackets"`
 	LastVideoPTS     int64  `json:"lastVideoPTSUs"`
+	AgentStarting    bool   `json:"agentStarting"`
+	AgentStarted     bool   `json:"agentStarted"`
+	AgentError       string `json:"agentError,omitempty"`
+}
+
+type agentConfig struct {
+	ADBPath       string
+	Serial        string
+	DistDir       string
+	SocketName    string
+	SocketAddress string
+	BitRate       int
 }
 
 type motionPointer struct {
@@ -124,7 +144,16 @@ var (
 	audioChannels    int
 	videoPacketCount atomic.Uint64
 	lastVideoPTS     atomic.Int64
+	agentStateMu     sync.RWMutex
+	agentStarting    bool
+	agentStarted     bool
+	agentStartError  string
 )
+
+var deviceSerialPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
+
+//go:embed index.html
+var indexFiles embed.FS
 
 var websocketUpgrader = websocket.Upgrader{
 	CheckOrigin: func(request *http.Request) bool {
@@ -140,25 +169,70 @@ var websocketUpgrader = websocket.Upgrader{
 }
 
 func main() {
-	log.Printf("HTTP stream: http://localhost%s/stream", HTTP_ADDR)
-	log.Printf("Agent socket: TCP %s (adb reverse localabstract:screen-sharing-agent tcp:%s)", SOCKET_ADDR, strings.TrimPrefix(SOCKET_ADDR, ":"))
-	go startTCP()
+	httpAddress := flag.String("http", HTTP_ADDR, "HTTP listen address")
+	socketAddress := flag.String("socket", SOCKET_ADDR, "agent TCP listen address")
+	distDir := flag.String("dist-dir", "dist", "directory containing the agent archive and native libraries")
+	deviceSerial := flag.String("device-serial", "", "Android device serial; installs and starts the agent after listeners are ready")
+	adbPath := flag.String("adb", "adb", "path to adb")
+	bitRate := flag.Int("bit-rate", 10000000, "agent AVC bit rate in bits per second")
+	flag.Parse()
 
-	fs := http.FileServer(http.Dir("."))
-	http.Handle("/", fs)
-	http.HandleFunc("/stream", mjpegHandler)
-	http.HandleFunc("/control", controlWebSocketHandler)
-	http.HandleFunc("/audio", audioWebSocketHandler)
-	http.HandleFunc("/api/display-state", displayStateHandler)
-	http.HandleFunc("/api/status", serverStatusHandler)
-	log.Fatal(http.ListenAndServe(HTTP_ADDR, nil))
-}
-
-func startTCP() {
-	listener, err := net.Listen("tcp", SOCKET_ADDR)
+	socketListener, err := net.Listen("tcp", *socketAddress)
 	if err != nil {
 		log.Fatal(err)
 	}
+	httpListener, err := net.Listen("tcp", *httpAddress)
+	if err != nil {
+		_ = socketListener.Close()
+		log.Fatal(err)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/", http.FileServer(http.FS(indexFiles)))
+	mux.HandleFunc("/stream", mjpegHandler)
+	mux.HandleFunc("/control", controlWebSocketHandler)
+	mux.HandleFunc("/audio", audioWebSocketHandler)
+	mux.HandleFunc("/api/display-state", displayStateHandler)
+	mux.HandleFunc("/api/status", serverStatusHandler)
+
+	go startTCP(socketListener)
+	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	log.Printf("HTTP stream: http://%s/stream", browserHost(httpListener.Addr().String()))
+	log.Printf("Agent socket: TCP %s", *socketAddress)
+	if *deviceSerial != "" {
+		config := agentConfig{
+			ADBPath:       *adbPath,
+			Serial:        *deviceSerial,
+			DistDir:       *distDir,
+			SocketName:    "screen-sharing-agent",
+			SocketAddress: *socketAddress,
+			BitRate:       *bitRate,
+		}
+		setAgentState(true, false, "")
+		go func() {
+			if err := installAndStartAgent(config); err != nil {
+				setAgentState(false, false, err.Error())
+				log.Printf("Android agent startup failed: %v", err)
+				return
+			}
+			setAgentState(false, true, "")
+		}()
+	}
+	log.Fatal(server.Serve(httpListener))
+}
+
+func browserHost(address string) string {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return address
+	}
+	if host == "" || host == "::" || host == "0.0.0.0" || host == "[::]" {
+		host = "localhost"
+	}
+	return net.JoinHostPort(host, port)
+}
+
+func startTCP(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -166,6 +240,138 @@ func startTCP() {
 			continue
 		}
 		go handleConn(conn)
+	}
+}
+
+func setAgentState(starting, started bool, err string) {
+	agentStateMu.Lock()
+	agentStarting = starting
+	agentStarted = started
+	agentStartError = err
+	agentStateMu.Unlock()
+}
+
+func installAndStartAgent(config agentConfig) error {
+	if !deviceSerialPattern.MatchString(config.Serial) {
+		return errors.New("invalid Android device serial")
+	}
+	if config.BitRate < 100000 || config.BitRate > 100000000 {
+		return errors.New("agent bit rate must be between 100000 and 100000000")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	runADB := func(args ...string) ([]byte, error) {
+		command := exec.CommandContext(ctx, config.ADBPath, append([]string{"-s", config.Serial}, args...)...)
+		output, err := command.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("adb %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
+		}
+		return output, nil
+	}
+
+	abiOutput, err := runADB("shell", "getprop", "ro.product.cpu.abi")
+	if err != nil {
+		return err
+	}
+	abi := strings.TrimSpace(string(abiOutput))
+	if !supportedAndroidABI(abi) {
+		return fmt.Errorf("unsupported Android ABI %q", abi)
+	}
+
+	jarPath := filepath.Join(config.DistDir, "screen-sharing-agent.jar")
+	libraryPath := filepath.Join(config.DistDir, "agent-libs", abi, "libscreen-sharing-agent.so")
+	if err := requireFile(jarPath); err != nil {
+		return err
+	}
+	if err := requireFile(libraryPath); err != nil {
+		return err
+	}
+	if _, err := runADB("shell", "mkdir", "-p", "/data/local/tmp/.studio"); err != nil {
+		return err
+	}
+
+	if !remoteFileMatches(ctx, config, jarPath, "/data/local/tmp/screen-sharing-agent.jar") {
+		if _, err := runADB("push", jarPath, "/data/local/tmp/screen-sharing-agent.jar"); err != nil {
+			return err
+		}
+	}
+	if !remoteFileMatches(ctx, config, libraryPath, "/data/local/tmp/.studio/libscreen-sharing-agent.so") {
+		if _, err := runADB("push", libraryPath, "/data/local/tmp/.studio/libscreen-sharing-agent.so"); err != nil {
+			return err
+		}
+	}
+
+	_, port, err := net.SplitHostPort(config.SocketAddress)
+	if err != nil {
+		return fmt.Errorf("invalid agent socket address %q: %w", config.SocketAddress, err)
+	}
+	if _, err := runADB("reverse", "localabstract:"+config.SocketName, "tcp:"+port); err != nil {
+		return err
+	}
+
+	remoteCommand := fmt.Sprintf(
+		"nohup env CLASSPATH=/data/local/tmp/screen-sharing-agent.jar LD_LIBRARY_PATH=/data/local/tmp/.studio app_process /data/local/tmp com.android.tools.screensharing.Main --socket=%s --flags=5 --max_bit_rate=%d --codec=avc >/data/local/tmp/.studio/agent.log 2>&1 </dev/null & echo $! >/data/local/tmp/.studio/agent.pid",
+		config.SocketName,
+		config.BitRate,
+	)
+	if _, err := runADB("shell", "sh", "-c", remoteCommand); err != nil {
+		return err
+	}
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		channelStatusMu.RLock()
+		videoReady := videoChannels > 0
+		audioReady := audioChannels > 0
+		channelStatusMu.RUnlock()
+		agentControlMu.Lock()
+		controlReady := agentControl != nil
+		agentControlMu.Unlock()
+		if videoReady && audioReady && controlReady {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for the agent channels on %s", config.Serial)
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	return fmt.Errorf("agent process launched on %s but its video/audio/control channels did not connect", config.Serial)
+}
+
+func remoteFileMatches(ctx context.Context, config agentConfig, localPath, remotePath string) bool {
+	localBytes, err := os.ReadFile(localPath)
+	if err != nil {
+		return false
+	}
+	localHash := sha256.Sum256(localBytes)
+	command := exec.CommandContext(ctx, config.ADBPath, "-s", config.Serial, "shell", "sha256sum", remotePath)
+	output, err := command.Output()
+	if err != nil {
+		return false
+	}
+	fields := strings.Fields(string(output))
+	return len(fields) != 0 && strings.EqualFold(fields[0], hex.EncodeToString(localHash[:]))
+}
+
+func requireFile(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("required agent artifact %q: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("required agent artifact %q is not a regular file", path)
+	}
+	return nil
+}
+
+func supportedAndroidABI(abi string) bool {
+	switch abi {
+	case "arm64-v8a", "armeabi-v7a", "x86", "x86_64":
+		return true
+	default:
+		return false
 	}
 }
 

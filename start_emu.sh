@@ -3,7 +3,7 @@
 EMULATOR_NAME="Medium_Phone_API_36"
 
 echo "🚀 Starting emulator..."
-/Users/vali/Library/Android/sdk/emulator/emulator -avd $EMULATOR_NAME -writable-system -no-snapshot-load &
+/Users/vali/Library/Android/sdk/emulator/emulator -avd $EMULATOR_NAME -writable-system -no-snapshot-load -no-window  -gpu host&
 
 # Wait for device to be ready
 adb wait-for-device
