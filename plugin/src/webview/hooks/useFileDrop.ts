@@ -1,4 +1,5 @@
 import { useDropzone } from 'react-dropzone';
+import { filesFromEvent } from '../files';
 import { useFileTransfer } from './useFileTransfer';
 
 export function useFileDrop(serverUrl: string) {
@@ -9,6 +10,7 @@ export function useFileDrop(serverUrl: string) {
 		noKeyboard: true,
 		// Stop VS Code's host window from taking over a handled drag.
 		noDragEventsBubbling: true,
+		getFilesFromEvent: filesFromEvent,
 		onDropAccepted: transfer.start,
 		onDrop: (accepted, rejected) => {
 			if (!accepted.length && !rejected.length) {transfer.showError(new Error('No readable files were dropped'));}

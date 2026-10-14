@@ -82,23 +82,30 @@
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "npm run check-types"
+    "test": "npm run check-types && tsc --noEmit -p tests/tsconfig.json && vitest run",
+    "test:watch": "vitest",
+    "test:browser": "npm run compile && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@testing-library/react": "^16.3.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
     "@types/vscode": "^1.140.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.5.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^29.1.1",
     "npm-run-all": "^4.1.5",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.61.1"
+    "typescript-eslint": "^8.61.1",
+    "vitest": "^5.0.4"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "file-selector": "^2.1.2",
     "lucide-react": "^1.57.0",
     "opus-decoder": "^0.7.12",
     "react": "^19.3.0",
