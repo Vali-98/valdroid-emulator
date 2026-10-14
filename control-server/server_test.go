@@ -2,8 +2,13 @@ package main
 
 import (
 	"encoding/binary"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestParseVideoPacketHeaderWireLayout(t *testing.T) {
@@ -129,6 +134,35 @@ func TestOpusPacketDurationAndEnvelope(t *testing.T) {
 	encoded := encodeAudioWebSocketPacket(packet)
 	if encoded[0] != 1 || binary.BigEndian.Uint64(encoded[1:9]) != 1234 || !reflect.DeepEqual(encoded[9:], packet.data) {
 		t.Fatalf("unexpected audio websocket envelope: % x", encoded)
+	}
+}
+
+func TestAudioWebSocketSendsConfigBeforeQueuedPackets(t *testing.T) {
+	audioMu.Lock()
+	previousConfig := audioConfig
+	audioConfig = []byte("OpusHead setup")
+	audioMu.Unlock()
+	t.Cleanup(func() {
+		audioMu.Lock()
+		audioConfig = previousConfig
+		audioMu.Unlock()
+	})
+	server := httptest.NewServer(http.HandlerFunc(audioWebSocketHandler))
+	defer server.Close()
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	for index := 0; index < 20; index++ {
+		broadcastAudio(audioPacket{data: []byte{0xfc, 0xff, 0xfe}})
+	}
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if message[0] != 1 || string(message[9:]) != "OpusHead setup" {
+		t.Fatalf("first audio packet must be codec setup, got % x", message)
 	}
 }
 

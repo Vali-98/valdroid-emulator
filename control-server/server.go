@@ -21,12 +21,14 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -74,6 +76,8 @@ type displayState struct {
 type serverStatus struct {
 	VideoConnected   bool   `json:"videoConnected"`
 	AudioConnected   bool   `json:"audioConnected"`
+	AudioConfigured  bool   `json:"audioConfigured"`
+	AudioPackets     uint64 `json:"audioPackets"`
 	ControlConnected bool   `json:"controlConnected"`
 	VideoPackets     uint64 `json:"videoPackets"`
 	LastVideoPTS     int64  `json:"lastVideoPTSUs"`
@@ -146,6 +150,7 @@ var (
 	videoChannels    int
 	audioChannels    int
 	videoPacketCount atomic.Uint64
+	audioPacketCount atomic.Uint64
 	lastVideoPTS     atomic.Int64
 	agentStateMu     sync.RWMutex
 	agentStarting    bool
@@ -199,7 +204,41 @@ func main() {
 	mux.HandleFunc("/api/status", serverStatusHandler)
 
 	go startTCP(socketListener)
-	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	shutdownContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		BaseContext: func(net.Listener) context.Context {
+			return shutdownContext
+		},
+	}
+	shutdownDone := make(chan struct{})
+	go func() {
+		<-shutdownContext.Done()
+		agentControlMu.Lock()
+		if agentControl != nil {
+			_ = agentControl.Close()
+		}
+		agentControlMu.Unlock()
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			channelStatusMu.RLock()
+			active := videoChannels + audioChannels
+			channelStatusMu.RUnlock()
+			if active == 0 {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		_ = socketListener.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("HTTP shutdown: %v", err)
+		}
+		close(shutdownDone)
+	}()
 	log.Printf("HTTP stream: http://%s/stream", browserHost(httpListener.Addr().String()))
 	log.Printf("Agent socket: TCP %s", *socketAddress)
 	if *deviceSerial != "" {
@@ -213,7 +252,10 @@ func main() {
 		}
 		setAgentState(true, false, "")
 		go func() {
-			if err := installAndStartAgent(config); err != nil {
+			if err := installAndStartAgent(shutdownContext, config); err != nil {
+				if shutdownContext.Err() != nil {
+					return
+				}
 				setAgentState(false, false, err.Error())
 				log.Printf("Android agent startup failed: %v", err)
 				return
@@ -221,7 +263,10 @@ func main() {
 			setAgentState(false, true, "")
 		}()
 	}
-	log.Fatal(server.Serve(httpListener))
+	if err := server.Serve(httpListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal(err)
+	}
+	<-shutdownDone
 }
 
 func browserHost(address string) string {
@@ -239,6 +284,9 @@ func startTCP(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
 			log.Printf("Agent socket accept failed: %v", err)
 			continue
 		}
@@ -254,14 +302,14 @@ func setAgentState(starting, started bool, err string) {
 	agentStateMu.Unlock()
 }
 
-func installAndStartAgent(config agentConfig) error {
+func installAndStartAgent(parent context.Context, config agentConfig) error {
 	if !deviceSerialPattern.MatchString(config.Serial) {
 		return errors.New("invalid Android device serial")
 	}
 	if config.BitRate < 100000 || config.BitRate > 100000000 {
 		return errors.New("agent bit rate must be between 100000 and 100000000")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), adbStartupTimeout)
+	ctx, cancel := context.WithTimeout(parent, adbStartupTimeout)
 	defer cancel()
 
 	runADB := func(args ...string) ([]byte, error) {
@@ -450,6 +498,7 @@ func serverStatusHandler(w http.ResponseWriter, r *http.Request) {
 		VideoConnected: videoChannels > 0,
 		AudioConnected: audioChannels > 0,
 		VideoPackets:   videoPacketCount.Load(),
+		AudioPackets:   audioPacketCount.Load(),
 		LastVideoPTS:   lastVideoPTS.Load(),
 	}
 	channelStatusMu.RUnlock()
@@ -461,6 +510,10 @@ func serverStatusHandler(w http.ResponseWriter, r *http.Request) {
 	status.AgentStarted = agentStarted
 	status.AgentError = agentStartError
 	agentStateMu.RUnlock()
+	audioMu.Lock()
+	status.AudioConfigured = len(audioConfig) != 0
+	audioMu.Unlock()
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(status)
 }
@@ -991,6 +1044,7 @@ func handleAudio(reader io.Reader) {
 		}
 		broadcastAudio(audioPacket{config: isConfig, timestamp: timestamp, data: payload})
 		if !isConfig {
+			audioPacketCount.Add(1)
 			timestamp += opusPacketDurationUS(payload)
 		}
 	}
@@ -1085,13 +1139,21 @@ func audioWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	client := &audioClient{conn: conn, packets: make(chan audioPacket, 8)}
 	audioMu.Lock()
 	audioClients[client] = struct{}{}
+	var initialConfig []byte
 	if len(audioConfig) != 0 {
-		client.packets <- audioPacket{config: true, data: append([]byte(nil), audioConfig...)}
+		initialConfig = append([]byte(nil), audioConfig...)
 	}
 	audioMu.Unlock()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		if len(initialConfig) != 0 {
+			_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			if err := conn.WriteMessage(websocket.BinaryMessage, encodeAudioWebSocketPacket(audioPacket{config: true, data: initialConfig})); err != nil {
+				_ = conn.Close()
+				return
+			}
+		}
 		for packet := range client.packets {
 			_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 			if err := conn.WriteMessage(websocket.BinaryMessage, encodeAudioWebSocketPacket(packet)); err != nil {
