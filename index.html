@@ -1,23 +1,351 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-    <title>Screen Stream</title>
-    <style>
-        body {
-            background: #111;
-            color: white;
-            text-align: center;
-            font-family: sans-serif;
-        }
-        img {
-            width: 90%;
-            max-width: 900px;
-            border: 2px solid #444;
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Android Emulator</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      background: #15191b;
+      color: #e5e9e7;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; }
+    header {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      padding: 0 16px;
+      border-bottom: 1px solid #394144;
+      background: #202729;
+      font-size: 12px;
+    }
+    header strong { color: #f3f6f4; font-size: 13px; font-weight: 650; }
+    .status { display: flex; align-items: center; gap: 7px; color: #9ba8a7; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #788384; }
+    .status[data-state="online"] .dot { background: #77d3a1; }
+    .status[data-state="error"] .dot { background: #ed806b; }
+    main { min-height: calc(100vh - 46px); display: grid; place-items: center; padding: 14px; }
+    #screen {
+      display: block;
+      max-width: min(100%, 1100px);
+      max-height: calc(100vh - 74px);
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border: 1px solid #4a5557;
+      background: #202729;
+      touch-action: none;
+      user-select: none;
+      outline: none;
+    }
+    #screen:focus { border-color: #86d7bd; }
+  </style>
 </head>
 <body>
-    <h1>📱 Live Screena</h1>
-    <img src="/stream" />
+  <header>
+    <strong>Android Emulator</strong>
+    <span class="status" id="videoStatus"><i class="dot"></i><span>Video waiting</span></span>
+    <span class="status" id="controlStatus"><i class="dot"></i><span>Input offline</span></span>
+    <span class="status" id="audioStatus"><i class="dot"></i><span>Audio waiting</span></span>
+  </header>
+  <main>
+    <img id="screen" src="/stream" alt="Android display" tabindex="0" draggable="false">
+  </main>
+  <script>
+    const screen = document.querySelector("#screen");
+    const statuses = {
+      video: document.querySelector("#videoStatus"),
+      control: document.querySelector("#controlStatus"),
+      audio: document.querySelector("#audioStatus")
+    };
+    const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
+    let controlSocket;
+    let display = { id: 0, width: 0, height: 0, orientation: 0 };
+    let heldButtons = 0;
+    let activePointerId = null;
+    let audioContext;
+    let audioDecoder;
+    let audioClock = 0;
+    let audioWork = Promise.resolve();
+    let controlSocketOpen = false;
+
+    function setStatus(element, text, state) {
+      element.dataset.state = state;
+      element.lastElementChild.textContent = text;
+    }
+
+    function connectControl() {
+      controlSocket = new WebSocket(`${wsProtocol}//${location.host}/control`);
+      controlSocket.onopen = () => {
+        controlSocketOpen = true;
+        setStatus(statuses.control, "Waiting for agent", "");
+      };
+      controlSocket.onclose = () => {
+        controlSocketOpen = false;
+        setStatus(statuses.control, "Input offline", "error");
+        setTimeout(connectControl, 1000);
+      };
+      controlSocket.onmessage = event => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.error) setStatus(statuses.control, message.error, "error");
+        } catch (_) {}
+      };
+    }
+
+    function sendControl(message) {
+      if (controlSocket?.readyState === WebSocket.OPEN) {
+        controlSocket.send(JSON.stringify(message));
+      }
+    }
+
+    async function updateDisplayState() {
+      try {
+        const response = await fetch("/api/display-state?display=0", { cache: "no-store" });
+        if (response.ok) display = await response.json();
+      } catch (_) {}
+    }
+    setInterval(updateDisplayState, 250);
+
+    async function updateServerStatus() {
+      try {
+        const response = await fetch("/api/status", { cache: "no-store" });
+        if (!response.ok) return;
+        const state = await response.json();
+        setStatus(statuses.video, state.videoConnected ? "Video online" : "Video waiting", state.videoConnected ? "online" : "");
+        if (controlSocketOpen) {
+          setStatus(statuses.control, state.controlConnected ? "Input ready" : "Waiting for agent", state.controlConnected ? "online" : "");
+        }
+        if (!audioDecoder) {
+          setStatus(statuses.audio, state.audioConnected ? "Audio connected" : "Audio waiting", state.audioConnected ? "online" : "");
+        }
+      } catch (_) {}
+    }
+    setInterval(updateServerStatus, 500);
+
+    function mapPoint(clientX, clientY) {
+      const rect = screen.getBoundingClientRect();
+      const frameWidth = screen.naturalWidth || rect.width;
+      const frameHeight = screen.naturalHeight || rect.height;
+      const contentLeft = rect.left + screen.clientLeft;
+      const contentTop = rect.top + screen.clientTop;
+      const contentWidth = screen.clientWidth;
+      const contentHeight = screen.clientHeight;
+      const frameX = Math.max(0, Math.min(frameWidth - 1, Math.floor((clientX - contentLeft) * frameWidth / contentWidth)));
+      const frameY = Math.max(0, Math.min(frameHeight - 1, Math.floor((clientY - contentTop) * frameHeight / contentHeight)));
+      return mapFramePointToDisplay(
+        frameX, frameY, frameWidth, frameHeight,
+        display.width || frameWidth, display.height || frameHeight,
+        display.orientation
+      );
+    }
+
+    function mapFramePointToDisplay(frameX, frameY, frameWidth, frameHeight, displayWidth, displayHeight, orientation) {
+      const x = frameX / Math.max(frameWidth - 1, 1);
+      const y = frameY / Math.max(frameHeight - 1, 1);
+      const maxX = displayWidth - 1;
+      const maxY = displayHeight - 1;
+      switch (orientation & 3) {
+        case 1: return { x: Math.round((1 - y) * maxX), y: Math.round(x * maxY) };
+        case 2: return { x: Math.round((1 - x) * maxX), y: Math.round((1 - y) * maxY) };
+        case 3: return { x: Math.round(y * maxX), y: Math.round((1 - x) * maxY) };
+        default: return { x: Math.round(x * maxX), y: Math.round(y * maxY) };
+      }
+    }
+
+    function sendMotion(event, action, buttonState = heldButtons, actionButton = 0, axes = []) {
+      const point = mapPoint(event.clientX, event.clientY);
+      sendControl({
+        type: "motion",
+        pointers: [{ ...point, id: 0, axes }],
+        action,
+        buttonState,
+        actionButton,
+        displayId: display.id || 0,
+        isMouse: event.pointerType === "mouse"
+      });
+    }
+
+    function buttonMask(button) {
+      return [1, 4, 2][button] || 0;
+    }
+
+    screen.addEventListener("pointerdown", event => {
+      if (activePointerId !== null) return;
+      event.preventDefault();
+      screen.focus({ preventScroll: true });
+      screen.setPointerCapture(event.pointerId);
+      activePointerId = event.pointerId;
+      if (event.pointerType === "mouse") {
+        const mask = buttonMask(event.button);
+        heldButtons |= mask;
+        sendMotion(event, 0, heldButtons, mask);
+      } else {
+        sendMotion(event, 0, 0, 0);
+      }
+      audioContext?.resume();
+    });
+    window.addEventListener("pointermove", event => {
+      if (event.pointerId !== activePointerId) return;
+      if (event.pointerType === "mouse" && event.buttons === 0 && heldButtons !== 0) {
+        releasePointer(event, true);
+        return;
+      }
+      sendMotion(event, 2);
+    });
+    function releasePointer(event, lostButtons = false) {
+      if (event.pointerId !== activePointerId) return;
+      const mask = lostButtons ? heldButtons : event.pointerType === "mouse" ? buttonMask(event.button) : 0;
+      heldButtons &= ~mask;
+      sendMotion(event, 1, heldButtons, mask);
+      activePointerId = null;
+    }
+    window.addEventListener("pointerup", releasePointer);
+    window.addEventListener("pointercancel", event => releasePointer(event, true));
+    screen.addEventListener("contextmenu", event => event.preventDefault());
+    screen.addEventListener("wheel", event => {
+      event.preventDefault();
+      sendMotion(event, 8, heldButtons, 0, [
+        { axis: 9, value: -event.deltaY },
+        { axis: 10, value: event.deltaX }
+      ]);
+    }, { passive: false });
+
+    const keyCodes = {
+      Enter: 66, Escape: 111, Backspace: 67, Tab: 61, " ": 62,
+      ArrowUp: 19, ArrowDown: 20, ArrowLeft: 21, ArrowRight: 22,
+      Home: 3, End: 123, PageUp: 92, PageDown: 93, Delete: 112,
+      Shift: 59, Control: 113, Alt: 57, Meta: 117,
+      ",": 55, ".": 56, "-": 69, "=": 70, "[": 71, "]": 72,
+      "\\": 73, ";": 74, "'": 75, "/": 76, "`": 68
+    };
+    function keyCode(key) {
+      if (/^[a-z]$/i.test(key)) return key.toUpperCase().charCodeAt(0) - 65 + 29;
+      if (/^[0-9]$/.test(key)) return key === "0" ? 7 : Number(key) + 7;
+      return keyCodes[key] || 0;
+    }
+    function metaState(event) {
+      return (event.shiftKey ? 1 : 0) | (event.altKey ? 2 : 0) |
+        (event.ctrlKey ? 0x1000 : 0) | (event.metaKey ? 0x10000 : 0);
+    }
+    window.addEventListener("keydown", event => {
+      if (document.activeElement !== screen) return;
+      const code = keyCode(event.key);
+      if (!code) return;
+      event.preventDefault();
+      sendControl({ type: "key", action: 0, keyCode: code, metaState: metaState(event) });
+    });
+    window.addEventListener("keyup", event => {
+      if (document.activeElement !== screen) return;
+      const code = keyCode(event.key);
+      if (!code) return;
+      event.preventDefault();
+      sendControl({ type: "key", action: 1, keyCode: code, metaState: metaState(event) });
+    });
+
+    function openAudio() {
+      const socket = new WebSocket(`${wsProtocol}//${location.host}/audio`);
+      socket.binaryType = "arraybuffer";
+      socket.onopen = () => setStatus(statuses.audio, "Audio connected", "online");
+      socket.onclose = () => {
+        setStatus(statuses.audio, "Audio offline", "error");
+        setTimeout(openAudio, 1500);
+      };
+      socket.onerror = () => setStatus(statuses.audio, "Audio unavailable", "error");
+      socket.onmessage = event => {
+        audioWork = audioWork.then(() => handleAudioMessage(event.data)).catch(error => {
+          setStatus(statuses.audio, error.message, "error");
+        });
+      };
+    }
+
+    async function handleAudioMessage(data) {
+        if (!("AudioDecoder" in window)) {
+          setStatus(statuses.audio, "Opus decode unavailable", "error");
+          return;
+        }
+        const packet = new Uint8Array(data);
+        if (packet.length < 9) return;
+        const view = new DataView(packet.buffer, packet.byteOffset, packet.byteLength);
+        const isConfig = packet[0] === 1;
+        const timestamp = Number(view.getBigUint64(1, false));
+        const payload = packet.subarray(9);
+        if (!audioContext) audioContext = new AudioContext({ sampleRate: 48000 });
+        if (isConfig) {
+          try {
+            if (audioDecoder && audioDecoder.state !== "closed") audioDecoder.close();
+            audioDecoder = new AudioDecoder({
+              output: playAudioData,
+              error: error => setStatus(statuses.audio, error.message, "error")
+            });
+            const baseConfig = {
+              codec: "opus",
+              sampleRate: 48000,
+              numberOfChannels: 2
+            };
+            const candidates = [
+              { ...baseConfig, description: payload },
+              baseConfig
+            ];
+            let configured = false;
+            for (const candidate of candidates) {
+              const support = await AudioDecoder.isConfigSupported(candidate);
+              if (!support.supported) continue;
+              try {
+                audioDecoder.configure(candidate);
+                configured = true;
+                break;
+              } catch (_) {
+                continue;
+              }
+            }
+            if (!configured) {
+              if (audioDecoder.state !== "closed") audioDecoder.close();
+              audioDecoder = undefined;
+              setStatus(statuses.audio, "Opus decode unsupported", "error");
+              return;
+            }
+            audioClock = 0;
+            setStatus(statuses.audio, "Opus ready", "online");
+          } catch (error) {
+            setStatus(statuses.audio, `Opus config failed: ${error.message}`, "error");
+          }
+          return;
+        }
+        if (audioDecoder?.state === "configured" && audioDecoder.decodeQueueSize < 8) {
+          audioDecoder.decode(new EncodedAudioChunk({ type: "key", timestamp, data: payload }));
+        }
+    }
+
+    function playAudioData(data) {
+      if (!audioContext || audioContext.state !== "running") {
+        data.close();
+        return;
+      }
+      const buffer = audioContext.createBuffer(data.numberOfChannels, data.numberOfFrames, data.sampleRate);
+      for (let channel = 0; channel < data.numberOfChannels; channel++) {
+        data.copyTo(buffer.getChannelData(channel), { planeIndex: channel, format: "f32-planar" });
+      }
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioContext.destination);
+      const now = audioContext.currentTime;
+      audioClock = Math.max(audioClock, now + 0.025);
+      source.start(audioClock);
+      audioClock += buffer.duration;
+      data.close();
+    }
+
+    screen.addEventListener("load", () => setStatus(statuses.video, "Video online", "online"));
+    screen.addEventListener("error", () => setStatus(statuses.video, "Video offline", "error"));
+    connectControl();
+    openAudio();
+    updateDisplayState();
+    updateServerStatus();
+  </script>
 </body>
 </html>
