@@ -1,161 +1,105 @@
 import * as React from 'react';
 
+type OpusDecoder = import('opus-decoder', { with: { 'resolution-mode': 'import' } }).OpusDecoder;
+type OpusDecodedAudio = import('opus-decoder', { with: { 'resolution-mode': 'import' } }).OpusDecodedAudio;
+
 type AudioState = 'off' | 'on' | 'error';
 type Setter<T> = React.Dispatch<React.SetStateAction<T>>;
 
-interface AudioDecoderConfig {
-	codec: string;
-	sampleRate: number;
-	numberOfChannels: number;
-	description?: Uint8Array;
-}
-
-interface WebCodecsAudioData {
-	readonly numberOfFrames: number;
-	readonly numberOfChannels: number;
-	readonly sampleRate: number;
-	copyTo(destination: Float32Array, options: { planeIndex: number; format: 'f32-planar' }): void;
-	close(): void;
-}
-
-interface WebCodecsAudioDecoder {
-	readonly state: 'unconfigured' | 'configured' | 'closed';
-	readonly decodeQueueSize: number;
-	configure(config: AudioDecoderConfig): void;
-	decode(chunk: unknown): void;
-	close(): void;
-}
-
-interface AudioDecoderConstructor {
-	new (init: { output: (audioData: WebCodecsAudioData) => void; error: (error: Error) => void }): WebCodecsAudioDecoder;
-	isConfigSupported(config: AudioDecoderConfig): Promise<{ supported: boolean }>;
-}
-
-function playDecodedAudio(audioContext: AudioContext, playheadRef: React.MutableRefObject<number>, audioData: WebCodecsAudioData): 'muted' | 'silent' | 'audible' {
-	try {
-		if (audioContext.state !== 'running') {return 'muted';}
-		const channels = Math.max(1, Math.min(audioData.numberOfChannels, 2));
-		const buffer = audioContext.createBuffer(channels, audioData.numberOfFrames, audioData.sampleRate);
-		let audible = false;
-		for (let channel = 0; channel < channels; channel++) {
-			const destination = buffer.getChannelData(channel);
-			audioData.copyTo(destination, { planeIndex: channel, format: 'f32-planar' });
-			if (!audible) {
-				for (let index = 0; index < destination.length; index += 16) {
-					if (Math.abs(destination[index]) > 0.0001) {audible = true; break;}
-				}
+function playDecodedAudio(audioContext: AudioContext, output: AudioNode, playheadRef: React.MutableRefObject<number>, audio: OpusDecodedAudio): 'muted' | 'silent' | 'audible' {
+	if (audio.samplesDecoded === 0 || audio.channelData.length === 0) {return 'silent';}
+	if (audioContext.state !== 'running') {return 'muted';}
+	const channels = Math.min(audio.channelData.length, 2);
+	const buffer = audioContext.createBuffer(channels, audio.samplesDecoded, audio.sampleRate);
+	let audible = false;
+	for (let channel = 0; channel < channels; channel++) {
+		const samples = audio.channelData[channel];
+		buffer.getChannelData(channel).set(samples);
+		if (!audible) {
+			for (let index = 0; index < samples.length; index += 16) {
+				if (Math.abs(samples[index]) > 0.0001) {audible = true; break;}
 			}
 		}
-		const source = audioContext.createBufferSource();
-		source.buffer = buffer;
-		source.connect(audioContext.destination);
-		const now = audioContext.currentTime;
-		if (playheadRef.current < now || playheadRef.current > now + 0.25) {playheadRef.current = now + 0.025;}
-		source.start(playheadRef.current);
-		playheadRef.current += buffer.duration;
-		return audible ? 'audible' : 'silent';
-	} finally {
-		audioData.close();
 	}
+	const source = audioContext.createBufferSource();
+	source.buffer = buffer;
+	source.connect(output);
+	const now = audioContext.currentTime;
+	if (playheadRef.current < now || playheadRef.current > now + 0.25) {playheadRef.current = now + 0.025;}
+	source.start(playheadRef.current);
+	playheadRef.current += buffer.duration;
+	return audible ? 'audible' : 'silent';
 }
 
 export function startAudio(
 	serverUrl: string,
 	contextRef: React.MutableRefObject<AudioContext | undefined>,
+	gainRef: React.MutableRefObject<GainNode | undefined>,
 	playheadRef: React.MutableRefObject<number>,
 	setAudioState: Setter<AudioState>,
 	setAudioDetail: Setter<string>,
 ): () => void {
-	const AudioDecoderCtor = (window as unknown as { AudioDecoder?: AudioDecoderConstructor }).AudioDecoder;
-	const EncodedAudioChunkCtor = (window as unknown as { EncodedAudioChunk?: new (init: { type: 'key' | 'delta'; timestamp: number; data: Uint8Array }) => unknown }).EncodedAudioChunk;
-	if (!AudioDecoderCtor || !EncodedAudioChunkCtor) {
-		setAudioState('error');
-		setAudioDetail('Opus playback unsupported in this webview');
-		return () => {};
-	}
-
 	const audioContext = contextRef.current ?? new AudioContext({ sampleRate: 48000 });
 	contextRef.current = audioContext;
+	const gain = audioContext.createGain();
+	gain.connect(audioContext.destination);
+	gainRef.current = gain;
 	setAudioState(audioContext.state === 'running' ? 'on' : 'off');
-	let decoder: WebCodecsAudioDecoder | undefined;
+	setAudioDetail('Waiting for Android audio');
+	let decoder: OpusDecoder | undefined;
 	let disposed = false;
 	let played = false;
 	let quietFrames = 0;
 	let failed = false;
 	let packetsReceived = 0;
+	let pendingPackets = 0;
 	let work = Promise.resolve();
-	let config: Uint8Array | undefined;
-	let decoderMode = 0;
+	let configured = false;
 	const fail = (detail: string) => {
 		if (!disposed) {failed = true; setAudioState('error'); setAudioDetail(detail);}
 	};
 	const syncAudioState = () => {
-		if (disposed) {return;}
-		if (!failed) {setAudioState(audioContext.state === 'running' ? 'on' : 'off');}
+		if (disposed || failed) {return;}
+		setAudioState(audioContext.state === 'running' ? 'on' : 'off');
 		if (audioContext.state === 'running' && played) {setAudioDetail('Audio playing');}
 		else if (audioContext.state === 'suspended') {setAudioDetail('Click emulator to enable audio');}
 	};
 	audioContext.addEventListener('statechange', syncAudioState);
 	syncAudioState();
-	setAudioDetail('Waiting for Android audio');
-
-	const configureDecoder = async (mode: number): Promise<boolean> => {
-		const candidate: AudioDecoderConfig = { codec: 'opus', sampleRate: 48000, numberOfChannels: 2 };
-		if (mode === 1) {candidate.description = config;}
-		try {
-			if (!(await AudioDecoderCtor.isConfigSupported(candidate)).supported || disposed) {return false;}
-			const next = new AudioDecoderCtor({
-				output: audioData => {
-					try {
-						const result = playDecodedAudio(audioContext, playheadRef, audioData);
-						if (result === 'audible' && !played) {played = true; setAudioDetail('Audio playing');}
-						else if (result === 'silent' && !played && ++quietFrames === 50) {setAudioDetail('Android audio is silent');}
-					} catch (error) {fail(`Audio playback failed: ${error instanceof Error ? error.message : String(error)}`);}
-				},
-				error: error => {
-					if (disposed || decoder !== next) {return;}
-					if (mode === 0 && config) {
-						decoder = undefined;
-						work = work.then(async () => {
-							if (!(await configureDecoder(1))) {fail(`Opus decode failed: ${error.message}`);}
-						});
-					} else {fail(`Opus decode failed: ${error.message}`);}
-				},
-			});
-			next.configure(candidate);
-			decoder?.close();
-			decoder = next;
-			decoderMode = mode;
-			return true;
-		} catch {return false;}
-	};
 
 	const socket = new WebSocket(`${serverUrl.replace(/^http:/, 'ws:')}/audio`);
 	socket.binaryType = 'arraybuffer';
 	socket.onmessage = event => {
-		if (!(event.data instanceof ArrayBuffer) || event.data.byteLength < 9) {return;}
+		if (!(event.data instanceof ArrayBuffer) || event.data.byteLength < 9 || disposed || failed) {return;}
 		const packet = new Uint8Array(event.data);
-		const timestamp = Number(new DataView(event.data).getBigUint64(1, false));
 		const payload = packet.subarray(9);
+		if (packet[0] !== 1 && pendingPackets >= 100) {return;}
+		pendingPackets++;
 		work = work.then(async () => {
-			if (disposed) {return;}
+			if (disposed || failed) {return;}
 			if (packet[0] === 1) {
-				config = payload;
-				decoder?.close();
-				decoder = undefined;
-				decoderMode = 0;
+				if (payload.length < 19 || String.fromCharCode(...payload.subarray(0, 8)) !== 'OpusHead') {throw new Error('Invalid Android Opus setup');}
+				const { OpusDecoder } = await import('opus-decoder');
+				decoder?.free();
+				decoder = new OpusDecoder({ channels: payload[9], preSkip: payload[10] | (payload[11] << 8) });
+				configured = false;
 				played = false;
 				quietFrames = 0;
 				playheadRef.current = 0;
-				if (!(await configureDecoder(0)) && !(await configureDecoder(1))) {fail('Opus decode unsupported in this webview');}
-				else {setAudioDetail(audioContext.state === 'running' ? 'Audio buffering' : 'Click emulator to enable audio');}
+				setAudioDetail('Loading Opus decoder');
+				await decoder.ready;
+				configured = true;
+				setAudioDetail(audioContext.state === 'running' ? 'Audio buffering' : 'Click emulator to enable audio');
 				return;
 			}
 			packetsReceived++;
-			if (decoder?.state === 'configured' && decoder.decodeQueueSize < 8) {
-				decoder.decode(new EncodedAudioChunkCtor({ type: 'key', timestamp, data: payload }));
-			}
-		}).catch(error => fail(`Audio failed: ${error instanceof Error ? error.message : String(error)}`));
+			if (!configured || !decoder) {return;}
+			const audio = decoder.decodeFrame(payload);
+			if (audio.errors.length > 0) {throw new Error(audio.errors[0].message);}
+			const result = playDecodedAudio(audioContext, gain, playheadRef, audio);
+			if (result === 'audible' && !played) {played = true; setAudioDetail('Audio playing');}
+			else if (result === 'silent' && !played && ++quietFrames === 50) {setAudioDetail('Android audio is silent');}
+		}).catch(error => fail(`Audio decode failed: ${error instanceof Error ? error.message : String(error)}`)).finally(() => {pendingPackets--;});
 	};
 	socket.onerror = () => fail('Audio connection failed');
 	socket.onclose = () => {if (!disposed) {fail('Audio connection closed');}};
@@ -168,10 +112,9 @@ export function startAudio(
 			if (!status.audioConnected) {setAudioDetail('Android audio disconnected');}
 			else if (!status.audioConfigured) {setAudioDetail('Waiting for Android audio encoder');}
 			else if (status.audioPackets === 0) {setAudioDetail('Waiting for Android sound');}
-			else if (!config) {setAudioDetail('Audio setup missing from stream');}
+			else if (!configured) {setAudioDetail('Loading Opus decoder');}
 			else if (packetsReceived === 0) {setAudioDetail('Audio packets not reaching webview');}
 			else if (audioContext.state !== 'running') {setAudioDetail('Click emulator to enable audio');}
-			else if (decoderMode === 1) {setAudioDetail('Audio buffering (OpusHead)');}
 		} catch { /* The stream can work while status polling is unavailable. */ }
 	};
 	const interval = window.setInterval(() => {void checkAudio();}, 3000);
@@ -180,6 +123,8 @@ export function startAudio(
 		window.clearInterval(interval);
 		audioContext.removeEventListener('statechange', syncAudioState);
 		socket.close();
-		if (decoder?.state !== 'closed') {decoder?.close();}
+		gain.disconnect();
+		if (gainRef.current === gain) {gainRef.current = undefined;}
+		void work.then(() => decoder?.free());
 	};
 }

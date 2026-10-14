@@ -1,8 +1,10 @@
 import * as React from 'react';
 import { createRoot } from 'react-dom/client';
 import { startAudio } from './webview/audio';
-import { DevicePicker, DeviceRail, EmulatorScreen, Header, LoadingState, StatusBar, type EmulatorTarget } from './webview/components';
-import { activeDeviceName, androidKeyCode, metaState, visibleImageRect } from './webview/input';
+import { DevicePicker, DeviceRail, EmulatorScreen, FileDropOverlay, Header, LoadingState, StatusBar, type EmulatorTarget } from './webview/components';
+import { androidKeyCode, metaState, visibleImageRect } from './webview/input';
+import { useDeviceVolume } from './webview/useDeviceVolume';
+import { useFileDrop } from './webview/useFileDrop';
 import './webview/styles';
 
 declare function acquireVsCodeApi(): { postMessage(message: HostMessage): void };
@@ -20,7 +22,7 @@ type HostMessage =
 
 type ExtensionMessage =
 	| { type: 'targets'; targets: EmulatorTarget[] }
-	| { type: 'status'; status: string; state: 'idle' | 'online' | 'error'; serverUrl?: string };
+	| { type: 'status'; status: string; state: 'idle' | 'online' | 'error'; serverUrl?: string; deviceName?: string };
 
 const vscode = acquireVsCodeApi();
 const initialDisplay: DisplayState = { id: 0, width: 0, height: 0, orientation: 0 };
@@ -31,6 +33,8 @@ function App(): React.JSX.Element {
 	const [status, setStatus] = React.useState('Select an emulator');
 	const [state, setState] = React.useState<'idle' | 'online' | 'error'>('idle');
 	const [serverUrl, setServerUrl] = React.useState('');
+	const [deviceName, setDeviceName] = React.useState('');
+	const [debugVisible, setDebugVisible] = React.useState(false);
 	const [display, setDisplay] = React.useState<DisplayState>(initialDisplay);
 	const [audioState, setAudioState] = React.useState<'off' | 'on' | 'error'>('off');
 	const [audioDetail, setAudioDetail] = React.useState('Waiting for Android audio');
@@ -39,8 +43,11 @@ function App(): React.JSX.Element {
 	const imageRef = React.useRef<HTMLImageElement>(null);
 	const socketRef = React.useRef<WebSocket | undefined>(undefined);
 	const audioContextRef = React.useRef<AudioContext | undefined>(undefined);
+	const audioGainRef = React.useRef<GainNode | undefined>(undefined);
 	const audioPlayheadRef = React.useRef(0);
 	const pointerIdRef = React.useRef<number | null>(null);
+	const refreshDeviceVolume = useDeviceVolume(serverUrl, audioGainRef);
+	const fileDrop = useFileDrop(serverUrl);
 
 	React.useEffect(() => {
 		const handleMessage = (event: MessageEvent<ExtensionMessage>) => {
@@ -58,6 +65,7 @@ function App(): React.JSX.Element {
 				setStatus(message.status);
 				setState(message.state);
 				setServerUrl(message.serverUrl ?? '');
+				setDeviceName(message.deviceName ?? '');
 			}
 		};
 		window.addEventListener('message', handleMessage);
@@ -78,7 +86,7 @@ function App(): React.JSX.Element {
 		socket.onopen = () => setStatus('Emulator connected');
 		socket.onclose = () => setStatus('Input connection closed');
 		socket.onerror = () => setStatus('Input connection failed');
-		const stopAudio = startAudio(serverUrl, audioContextRef, audioPlayheadRef, setAudioState, setAudioDetail);
+		const stopAudio = startAudio(serverUrl, audioContextRef, audioGainRef, audioPlayheadRef, setAudioState, setAudioDetail);
 
 		let disposed = false;
 		const loadDisplay = async () => {
@@ -103,6 +111,10 @@ function App(): React.JSX.Element {
 	}, [serverUrl]);
 
 	React.useEffect(() => {
+		if (!serverUrl) {setDebugVisible(false);}
+	}, [serverUrl]);
+
+	React.useEffect(() => {
 		const stage = stageRef.current;
 		if (!stage || !serverUrl) {
 			return;
@@ -113,7 +125,8 @@ function App(): React.JSX.Element {
 				return;
 			}
 			const visible = visibleImageRect(image);
-			setRailLeft(Math.max(10, Math.round(visible.left - stage.getBoundingClientRect().left - 46)));
+			const stageRect = stage.getBoundingClientRect();
+			setRailLeft(Math.max(2, Math.min(stageRect.width - 40, Math.round(visible.left + visible.width - stageRect.left + 6))));
 		};
 		const observer = new ResizeObserver(updateRail);
 		observer.observe(stage);
@@ -146,10 +159,11 @@ function App(): React.JSX.Element {
 		const socket = socketRef.current;
 		if (socket?.readyState === WebSocket.OPEN) {
 			socket.send(JSON.stringify({ type: 'key', action: 8, keyCode, metaState: 0 }));
+			if (keyCode === 24 || keyCode === 25 || keyCode === 164) {window.setTimeout(refreshDeviceVolume, 300);}
 		}
 	};
 	const isLoading = state === 'online' && !serverUrl;
-	const title = serverUrl ? activeDeviceName(status) : 'No Emulator Loaded';
+	const title = serverUrl ? deviceName || 'Emulator Loaded' : 'No Emulator Loaded';
 	const displayMeta = display.width > 0 && display.height > 0 ? `${display.width}x${display.height} · rotation ${display.orientation}` : '';
 
 	const mapPoint = (clientX: number, clientY: number, clamp = true) => {
@@ -239,8 +253,8 @@ function App(): React.JSX.Element {
 
 	return (
 		<div className="app">
-			<Header title={title} loaded={Boolean(serverUrl)} onClose={close} />
-			<main className="stage" ref={stageRef}>
+			<Header title={title} loaded={Boolean(serverUrl)} debugVisible={debugVisible} onToggleDebug={() => setDebugVisible(value => !value)} onClose={close} />
+			<main className="stage" ref={stageRef} onDragEnter={fileDrop.onDragEnter} onDragLeave={fileDrop.onDragLeave} onDragOver={fileDrop.onDragOver} onDrop={fileDrop.onDrop}>
 				{serverUrl ? <>
 					<DeviceRail left={railLeft} onKey={sendDeviceKey} />
 					<EmulatorScreen
@@ -249,7 +263,11 @@ function App(): React.JSX.Element {
 						onLoad={() => {
 							const image = imageRef.current;
 							const stage = stageRef.current;
-							if (image && stage) {setRailLeft(Math.max(10, Math.round(visibleImageRect(image).left - stage.getBoundingClientRect().left - 46)));}
+							if (image && stage) {
+								const visible = visibleImageRect(image);
+								const stageRect = stage.getBoundingClientRect();
+								setRailLeft(Math.max(2, Math.min(stageRect.width - 40, Math.round(visible.left + visible.width - stageRect.left + 6))));
+							}
 						}}
 						onPointerDown={event => {
 							if (pointerIdRef.current !== null || (event.pointerType === 'mouse' && event.button !== 0) || !mapPoint(event.clientX, event.clientY, false)) {return;}
@@ -267,6 +285,7 @@ function App(): React.JSX.Element {
 						onKeyDown={event => sendKey(event, 0)}
 						onKeyUp={event => sendKey(event, 1)}
 					/>
+					<FileDropOverlay dragging={fileDrop.dragging} message={fileDrop.message} progress={fileDrop.progress} elapsedSeconds={fileDrop.elapsedSeconds} complete={fileDrop.complete} error={fileDrop.error} />
 				</> : isLoading ? <LoadingState status={status} /> : <DevicePicker
 					targets={targets}
 					selected={selectedTarget}
@@ -276,7 +295,7 @@ function App(): React.JSX.Element {
 					error={state === 'error' ? status : undefined}
 				/>}
 			</main>
-			<StatusBar status={status} state={state} displayMeta={displayMeta} audioDetail={audioDetail} audioState={audioState} loaded={Boolean(serverUrl)} />
+			{debugVisible && <StatusBar status={status} state={state} displayMeta={displayMeta} audioDetail={audioDetail} audioState={audioState} loaded={Boolean(serverUrl)} />}
 		</div>
 	);
 }

@@ -1,16 +1,25 @@
 import * as React from 'react';
-import { ArrowLeft, House, PanelsTopLeft, Play, Power, Volume1, Volume2, VolumeX, X } from 'lucide-react';
+import { ArrowLeft, Bug, CheckCircle2, House, LoaderCircle, PanelsTopLeft, Play, Power, Upload, Volume1, Volume2, VolumeX, X } from 'lucide-react';
 
 export interface EmulatorTarget {
 	label: string;
 	value: string;
 }
 
-export function Header({ title, loaded, onClose }: { title: string; loaded: boolean; onClose: () => void }): React.JSX.Element {
+export function Header({ title, loaded, debugVisible, onToggleDebug, onClose }: {
+	title: string;
+	loaded: boolean;
+	debugVisible: boolean;
+	onToggleDebug: () => void;
+	onClose: () => void;
+}): React.JSX.Element {
 	return <header className="topbar">
 		<div className="topbar-spacer" />
 		<div className={`device-pill ${loaded ? 'loaded' : ''}`}>{title}</div>
-		<button type="button" className="close-button" disabled={!loaded} onClick={onClose} aria-label="Close emulator" title="Close emulator"><X size={18} /></button>
+		<div className="topbar-actions">
+			<button type="button" className="debug-button" disabled={!loaded} aria-pressed={debugVisible} onClick={onToggleDebug} aria-label={debugVisible ? 'Hide debug info' : 'Show debug info'} title={debugVisible ? 'Hide debug info' : 'Show debug info'}><Bug size={16} /></button>
+			<button type="button" className="close-button" disabled={!loaded} onClick={onClose} aria-label="Close emulator" title="Close emulator"><X size={18} /></button>
+		</div>
 	</header>;
 }
 
@@ -51,6 +60,29 @@ export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, 
 
 export function LoadingState({ status }: { status: string }): React.JSX.Element {
 	return <div className="loading"><div className="spinner" /><div className="loading-status">{status}</div></div>;
+}
+
+export function FileDropOverlay({ dragging, message, progress, elapsedSeconds, complete, error }: {
+	dragging: boolean;
+	message: string;
+	progress?: number;
+	elapsedSeconds: number;
+	complete: boolean;
+	error: boolean;
+}): React.JSX.Element | null {
+	if (dragging) {
+		return <div className="drop-overlay" aria-live="polite"><div className="drop-prompt"><Upload size={24} /><span>Drop to send to device</span><small>Files go to Downloads</small></div></div>;
+	}
+	if (!message) {return null;}
+	return <div className={`transfer-toast ${error ? 'error' : ''} ${complete ? 'complete' : ''}`} role="status">
+		<div className="transfer-line">
+			{complete ? <CheckCircle2 size={16} /> : progress === undefined ? <Upload size={16} /> : <LoaderCircle className="transfer-spinner" size={16} />}
+			<span>{message}</span>
+			{progress !== undefined && <span className="transfer-progress">{progress}%</span>}
+		</div>
+		{progress !== undefined && <div className="transfer-bar" aria-label={`Transfer ${progress}% complete`}><div style={{ width: `${progress}%` }} /></div>}
+		{progress !== undefined && <div className="transfer-time">{complete ? `Completed in ${elapsedSeconds}s` : `${elapsedSeconds}s elapsed`}</div>}
+	</div>;
 }
 
 export function EmulatorScreen({ serverUrl, imageRef, onLoad, onPointerDown, onWheel, onKeyDown, onKeyUp }: {

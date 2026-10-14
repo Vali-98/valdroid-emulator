@@ -4,6 +4,7 @@ import type { EmulatorTarget } from '../lib/targets';
 export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
 	private serverUrl?: string;
+	private deviceName?: string;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -55,13 +56,14 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		this.view?.webview.postMessage({ type: 'targets', targets });
 	}
 
-	setServer(serverUrl?: string): void {
+	setServer(serverUrl?: string, deviceName?: string): void {
 		this.serverUrl = serverUrl;
+		this.deviceName = serverUrl ? deviceName : undefined;
 		this.postStatus();
 	}
 
 	setStatus(status: string, state: 'idle' | 'online' | 'error'): void {
-		this.view?.webview.postMessage({ type: 'status', status, state, serverUrl: this.serverUrl });
+		this.view?.webview.postMessage({ type: 'status', status, state, serverUrl: this.serverUrl, deviceName: this.deviceName });
 	}
 
 	private postStatus(): void {
@@ -71,7 +73,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private getHtml(webview: vscode.Webview): string {
 		const nonce = [...Array(24)].map(() => Math.random().toString(36)[2]).join('');
 		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview.js'));
-		const csp = `default-src 'none'; img-src http://127.0.0.1:* data: blob:; connect-src http://127.0.0.1:* ws://127.0.0.1:*; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource};`;
+		const csp = `default-src 'none'; img-src http://127.0.0.1:* data: blob:; connect-src http://127.0.0.1:* ws://127.0.0.1:*; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval';`;
 		return `<!doctype html>
 <html lang="en">
 <head>

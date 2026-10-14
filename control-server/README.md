@@ -33,4 +33,6 @@ Start the server with the selected Android device serial and this directory's `d
 
 The server binds its HTTP and agent TCP listeners first, installs only changed agent files, configures `adb reverse`, then launches the agent. `/api/status` reports channel readiness and startup failures. The VS Code extension performs AVD selection/startup and passes the selected device serial to the server.
 
+The standalone test page at `/` is disabled by default. Add `--test-webserver` when running the server manually to serve it. The VS Code extension does not use this flag. `/api/volume` reports the device's media volume; `POST /api/upload?name=<filename>` sends a local file to `/sdcard/Download` (up to 4 GiB).
+
 AVC decode prerequisites by host are listed in [BUILDING.md](BUILDING.md).

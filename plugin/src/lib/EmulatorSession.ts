@@ -32,11 +32,19 @@ export class EmulatorSession {
 	async startTarget(value: string): Promise<void> {
 		try {
 			const serial = value.startsWith('device:') ? value.slice('device:'.length) : await this.launchAVD(value.slice('avd:'.length));
-			await this.startServer(serial);
+			const fallbackName = value.startsWith('device:') ? serial : value.slice('avd:'.length);
+			const name = await this.deviceName(serial, fallbackName);
+			await this.startServer(serial, name);
 		} catch (error) {
 			await this.stop();
 			throw error;
 		}
+	}
+
+	private async deviceName(serial: string, fallback: string): Promise<string> {
+		if (!serial.startsWith('emulator-')) {return fallback;}
+		const output = await runFile(this.adbPath, ['-s', serial, 'emu', 'avd', 'name']).catch(() => '');
+		return output.split(/\r?\n/).map(line => line.trim()).find(line => line && line !== 'OK') || fallback;
 	}
 
 	private async launchAVD(avd: string): Promise<string> {
@@ -61,7 +69,7 @@ export class EmulatorSession {
 		throw new Error(`Timed out waiting for AVD ${avd} to finish booting.`);
 	}
 
-	private async startServer(serial: string): Promise<void> {
+	private async startServer(serial: string, name: string): Promise<void> {
 		if (this.serverProcess && !this.serverProcess.killed) {await this.stopServer();}
 		const target = platformTarget();
 		const bundleDir = path.join(this.extensionPath, 'bundle', target);
@@ -100,7 +108,7 @@ export class EmulatorSession {
 			throw error;
 		}
 		if (this.serverProcess !== child) {return;}
-		this.provider.setServer(baseUrl);
+		this.provider.setServer(baseUrl, name);
 		this.provider.setStatus(`Connected · ${serial}`, 'online');
 		this.output.appendLine(`Control server ready at ${baseUrl} for ${serial}`);
 	}

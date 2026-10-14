@@ -16,7 +16,7 @@ style.textContent = `
 	}
 	.topbar {
 		display: grid;
-		grid-template-columns: 32px minmax(0, 1fr) 32px;
+		grid-template-columns: 72px minmax(0, 1fr) 72px;
 		align-items: center;
 		gap: 8px;
 		min-height: 42px;
@@ -25,8 +25,13 @@ style.textContent = `
 		background: var(--vscode-sideBar-background);
 	}
 	.topbar-spacer {
-		width: 32px;
+		width: 72px;
 		height: 32px;
+	}
+	.topbar-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 4px;
 	}
 	.device-pill {
 		min-width: 0;
@@ -76,7 +81,8 @@ style.textContent = `
 		cursor: default;
 		opacity: 0.55;
 	}
-	.close-button {
+	.close-button,
+	.debug-button {
 		display: grid;
 		place-items: center;
 		width: 32px;
@@ -87,10 +93,12 @@ style.textContent = `
 		border-color: transparent;
 		border-radius: 6px;
 	}
-	.close-button:disabled {
+	.close-button:disabled,
+	.debug-button:disabled {
 		visibility: hidden;
 	}
-	.close-button svg {
+	.close-button svg,
+	.debug-button svg {
 		width: 18px;
 		height: 18px;
 		stroke: currentColor;
@@ -98,7 +106,9 @@ style.textContent = `
 		stroke-linecap: round;
 		fill: none;
 	}
-	.close-button:hover:not(:disabled) {
+	.close-button:hover:not(:disabled),
+	.debug-button:hover:not(:disabled),
+	.debug-button[aria-pressed="true"] {
 		color: var(--vscode-foreground);
 		background: var(--vscode-toolbar-hoverBackground);
 	}
@@ -110,7 +120,10 @@ style.textContent = `
 	}
 	.screen-frame {
 		position: absolute;
-		inset: 10px 10px 10px 58px;
+		inset: 4px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		overflow: hidden;
 		border-radius: 8px;
 		background: transparent;
@@ -129,7 +142,7 @@ style.textContent = `
 		border: 1px solid var(--vscode-panel-border);
 		border-radius: 7px;
 		background: var(--vscode-sideBar-background);
-		max-height: calc(100% - 20px);
+		max-height: calc(100% - 8px);
 		overflow-y: auto;
 	}
 	.device-rail button {
@@ -157,17 +170,90 @@ style.textContent = `
 	}
 	#screen {
 		display: block;
-		width: 100%;
+		width: max(1px, calc(100% - 84px));
 		height: 100%;
 		touch-action: none;
 		user-select: none;
 		outline: none;
 		object-fit: contain;
 	}
-	#screen:focus {
-		outline: 1px solid var(--vscode-focusBorder);
-		outline-offset: -1px;
+	.drop-overlay {
+		position: absolute;
+		z-index: 3;
+		inset: 4px;
+		display: grid;
+		place-items: center;
+		border: 2px dashed var(--vscode-focusBorder);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
+		pointer-events: none;
 	}
+	.drop-prompt {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px;
+		padding: 12px;
+		color: var(--vscode-foreground);
+		font-size: 14px;
+		font-weight: 600;
+		text-align: center;
+	}
+	.drop-prompt small {
+		color: var(--vscode-descriptionForeground);
+		font-size: 11px;
+		font-weight: 400;
+	}
+	.transfer-toast {
+		position: absolute;
+		z-index: 3;
+		left: 50%;
+		bottom: 10px;
+		transform: translateX(-50%);
+		display: grid;
+		gap: 6px;
+		width: min(280px, calc(100% - 16px));
+		padding: 7px 10px;
+		border: 1px solid var(--vscode-panel-border);
+		border-radius: 6px;
+		background: var(--vscode-editor-background);
+		color: var(--vscode-foreground);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+		font-size: 11px;
+		pointer-events: none;
+	}
+	.transfer-line {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+	.transfer-line span:nth-child(2) {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.transfer-toast.error {
+		color: var(--vscode-errorForeground);
+		border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+	}
+	.transfer-toast.complete { color: var(--vscode-testing-iconPassed, var(--vscode-foreground)); }
+	.transfer-progress { flex: none; margin-left: auto; }
+	.transfer-bar {
+		height: 3px;
+		overflow: hidden;
+		border-radius: 2px;
+		background: var(--vscode-progressBar-background, var(--vscode-panel-border));
+	}
+	.transfer-bar > div {
+		height: 100%;
+		background: var(--vscode-button-background);
+		transition: width 120ms linear;
+	}
+	.transfer-toast.complete .transfer-bar > div { background: var(--vscode-testing-iconPassed, var(--vscode-button-background)); }
+	.transfer-time { color: var(--vscode-descriptionForeground); font-size: 10px; }
+	.transfer-spinner { animation: spin 0.9s linear infinite; }
 	.empty {
 		position: absolute;
 		inset: 0;
@@ -175,28 +261,29 @@ style.textContent = `
 		gap: 10px;
 		place-content: center;
 		justify-items: center;
-		padding: 16px;
+		padding: 8px;
 		color: var(--vscode-descriptionForeground);
 		text-align: center;
 	}
 	.device-picker {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 38px;
-		gap: 8px;
-		width: min(100%, 360px);
-		padding: 8px;
-		border: 1px solid var(--vscode-panel-border);
-		border-radius: 8px;
-		background: var(--vscode-sideBar-background);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+		grid-template-columns: minmax(0, 1fr) 36px;
+		gap: 12px;
+		width: min(100%, 420px);
+        padding: 8px;
+	}
+	.device-picker select {
+		height: 36px;
+		padding: 0 14px;
+		border-radius: 999px;
 	}
 	.play-button {
 		display: grid;
 		place-items: center;
-		width: 38px;
-		height: 34px;
+		width: 36px;
+		height: 36px;
 		padding: 0;
-		border-radius: 6px;
+		border-radius: 50%;
 	}
 	.play-button svg {
 		width: 18px;
