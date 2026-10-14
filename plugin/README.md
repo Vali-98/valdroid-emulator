@@ -53,3 +53,7 @@ or reducers instead of effects.
 Run `npm run compile` for types, hook linting, and development bundles, or
 `npm run package` for production bundles. Reload the Extension Development Host
 after rebuilding. The webview loads both JS and CSS from `dist/`.
+
+Run `npm test` for type checking and the Vitest/Testing Library suite, or
+`npm run test:watch` while editing. Tests cover host messages, control sockets,
+query cancellation, coordinate mapping, uploads, and drag/drop failure recovery.
