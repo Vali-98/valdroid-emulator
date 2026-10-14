@@ -1,10 +1,6 @@
 import type * as vscode from 'vscode';
 import { runFile } from './process';
-
-export interface EmulatorTarget {
-	label: string;
-	value: string;
-}
+import type { EmulatorTarget } from '../shared/protocol';
 
 export async function listTargets(emulatorPath: string, adbPath: string, output: vscode.OutputChannel): Promise<EmulatorTarget[]> {
 	const targets: EmulatorTarget[] = [];

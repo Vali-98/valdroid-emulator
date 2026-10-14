@@ -1,0 +1,21 @@
+import { Fragment } from 'react';
+import { ArrowLeft, House, PanelsTopLeft, Power, Volume1, Volume2, VolumeX, type LucideIcon } from 'lucide-react';
+
+const controls: Array<{ code: number; label: string; Icon: LucideIcon; divider?: boolean }> = [
+	{ code: 26, label: 'Power', Icon: Power },
+	{ code: 4, label: 'Back', Icon: ArrowLeft, divider: true },
+	{ code: 3, label: 'Home', Icon: House },
+	{ code: 187, label: 'Recent apps', Icon: PanelsTopLeft },
+	{ code: 24, label: 'Volume up', Icon: Volume2, divider: true },
+	{ code: 25, label: 'Volume down', Icon: Volume1 },
+	{ code: 164, label: 'Mute device', Icon: VolumeX },
+];
+
+export function DeviceRail({ onKey }: { onKey: (keyCode: number) => void }) {
+	return <nav className="device-rail" aria-label="Device controls">
+		{controls.map(({ code, label, Icon, divider }) => <Fragment key={code}>
+			{divider && <div className="rail-divider" />}
+			<button type="button" onClick={() => onKey(code)} aria-label={label} title={label}><Icon size={18} /></button>
+		</Fragment>)}
+	</nav>;
+}

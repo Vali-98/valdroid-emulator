@@ -5,13 +5,7 @@ import type * as vscode from 'vscode';
 import { delay, platformTarget, runFile, terminateProcess, waitForExit } from './process';
 import { listTargets } from './targets';
 import type { EmulatorViewProvider } from '../view/EmulatorViewProvider';
-
-interface ServerStatus {
-	videoConnected: boolean;
-	audioConnected: boolean;
-	controlConnected: boolean;
-	agentError?: string;
-}
+import type { ServerStatus } from '../shared/protocol';
 
 export class EmulatorSession {
 	private serverProcess?: ChildProcess;

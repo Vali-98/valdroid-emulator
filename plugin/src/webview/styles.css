@@ -1,8 +1,9 @@
-const style = document.createElement('style');
-style.textContent = `
 	* { box-sizing: border-box; }
 	html, body, #root { height: 100%; }
 	body {
+		margin: 0;
+		padding: 0;
+		overflow: hidden;
 		color: var(--vscode-foreground);
 		background: var(--vscode-sideBar-background);
 		font-family: var(--vscode-font-family);
@@ -20,7 +21,7 @@ style.textContent = `
 		align-items: center;
 		gap: 8px;
 		min-height: 42px;
-		padding: 6px 8px;
+		padding: 6px 0px;
 		border-bottom: 1px solid var(--vscode-panel-border);
 		background: var(--vscode-sideBar-background);
 	}
@@ -120,7 +121,7 @@ style.textContent = `
 	}
 	.screen-frame {
 		position: absolute;
-		inset: 4px;
+		inset: 4px 40px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -131,14 +132,15 @@ style.textContent = `
 	.device-rail {
 		position: absolute;
 		z-index: 1;
+		right: 4px;
 		top: 50%;
 		transform: translateY(-50%);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: 2px;
-		width: 38px;
-		padding: 4px;
+		width: 32px;
+		padding: 2px;
 		border: 1px solid var(--vscode-panel-border);
 		border-radius: 7px;
 		background: var(--vscode-sideBar-background);
@@ -149,8 +151,8 @@ style.textContent = `
 		flex: none;
 		display: grid;
 		place-items: center;
-		width: 28px;
-		height: 28px;
+		width: 26px;
+		height: 26px;
 		padding: 0;
 		border: 0;
 		border-radius: 5px;
@@ -170,7 +172,7 @@ style.textContent = `
 	}
 	#screen {
 		display: block;
-		width: max(1px, calc(100% - 84px));
+		width: 100%;
 		height: 100%;
 		touch-action: none;
 		user-select: none;
@@ -187,6 +189,14 @@ style.textContent = `
 		border-radius: 8px;
 		background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
 		pointer-events: none;
+		opacity: 0;
+		visibility: hidden;
+		transition: opacity 100ms ease, visibility 0s linear 100ms;
+	}
+	.drop-overlay.visible {
+		opacity: 1;
+		visibility: visible;
+		transition-delay: 0s;
 	}
 	.drop-prompt {
 		display: flex;
@@ -334,5 +344,3 @@ style.textContent = `
 	@keyframes spin {
 		to { transform: rotate(360deg); }
 	}
-`;
-document.head.append(style);

@@ -1,12 +1,21 @@
-import * as React from 'react';
+import type { DeviceVolume, ServerStatus } from '../shared/protocol';
+import { socketUrl } from './api';
 
 type OpusDecoder = import('opus-decoder', { with: { 'resolution-mode': 'import' } }).OpusDecoder;
 type OpusDecodedAudio = import('opus-decoder', { with: { 'resolution-mode': 'import' } }).OpusDecodedAudio;
 
-type AudioState = 'off' | 'on' | 'error';
-type Setter<T> = React.Dispatch<React.SetStateAction<T>>;
+export interface AudioStatus {
+	state: 'off' | 'on' | 'error';
+	detail: string;
+}
 
-function playDecodedAudio(audioContext: AudioContext, output: AudioNode, playheadRef: React.MutableRefObject<number>, audio: OpusDecodedAudio): 'muted' | 'silent' | 'audible' {
+export interface AudioStream {
+	stop(): void;
+	setVolume(volume: DeviceVolume): void;
+	updateServerStatus(status: ServerStatus): void;
+}
+
+function playDecodedAudio(audioContext: AudioContext, output: AudioNode, playheadRef: { current: number }, audio: OpusDecodedAudio): 'muted' | 'silent' | 'audible' {
 	if (audio.samplesDecoded === 0 || audio.channelData.length === 0) {return 'silent';}
 	if (audioContext.state !== 'running') {return 'muted';}
 	const channels = Math.min(audio.channelData.length, 2);
@@ -33,17 +42,14 @@ function playDecodedAudio(audioContext: AudioContext, output: AudioNode, playhea
 
 export function startAudio(
 	serverUrl: string,
-	contextRef: React.MutableRefObject<AudioContext | undefined>,
-	gainRef: React.MutableRefObject<GainNode | undefined>,
-	playheadRef: React.MutableRefObject<number>,
-	setAudioState: Setter<AudioState>,
-	setAudioDetail: Setter<string>,
-): () => void {
-	const audioContext = contextRef.current ?? new AudioContext({ sampleRate: 48000 });
-	contextRef.current = audioContext;
+	audioContext: AudioContext,
+	update: (status: Partial<AudioStatus>) => void,
+): AudioStream {
+	const setAudioState = (state: AudioStatus['state']) => update({ state });
+	const setAudioDetail = (detail: string) => update({ detail });
+	const playheadRef = { current: 0 };
 	const gain = audioContext.createGain();
 	gain.connect(audioContext.destination);
-	gainRef.current = gain;
 	setAudioState(audioContext.state === 'running' ? 'on' : 'off');
 	setAudioDetail('Waiting for Android audio');
 	let decoder: OpusDecoder | undefined;
@@ -67,7 +73,7 @@ export function startAudio(
 	audioContext.addEventListener('statechange', syncAudioState);
 	syncAudioState();
 
-	const socket = new WebSocket(`${serverUrl.replace(/^http:/, 'ws:')}/audio`);
+	const socket = new WebSocket(socketUrl(serverUrl, '/audio'));
 	socket.binaryType = 'arraybuffer';
 	socket.onmessage = event => {
 		if (!(event.data instanceof ArrayBuffer) || event.data.byteLength < 9 || disposed || failed) {return;}
@@ -80,6 +86,7 @@ export function startAudio(
 			if (packet[0] === 1) {
 				if (payload.length < 19 || String.fromCharCode(...payload.subarray(0, 8)) !== 'OpusHead') {throw new Error('Invalid Android Opus setup');}
 				const { OpusDecoder } = await import('opus-decoder');
+				if (disposed) {return;}
 				decoder?.free();
 				decoder = new OpusDecoder({ channels: payload[9], preSkip: payload[10] | (payload[11] << 8) });
 				configured = false;
@@ -88,6 +95,7 @@ export function startAudio(
 				playheadRef.current = 0;
 				setAudioDetail('Loading Opus decoder');
 				await decoder.ready;
+				if (disposed) {return;}
 				configured = true;
 				setAudioDetail(audioContext.state === 'running' ? 'Audio buffering' : 'Click emulator to enable audio');
 				return;
@@ -103,28 +111,27 @@ export function startAudio(
 	};
 	socket.onerror = () => fail('Audio connection failed');
 	socket.onclose = () => {if (!disposed) {fail('Audio connection closed');}};
-	const checkAudio = async () => {
-		if (disposed || played || failed) {return;}
-		try {
-			const response = await fetch(`${serverUrl}/api/status`, { cache: 'no-store' });
-			if (!response.ok || disposed || played || failed) {return;}
-			const status = await response.json() as { audioConnected: boolean; audioConfigured: boolean; audioPackets: number };
+	return {
+		updateServerStatus(status) {
+			if (disposed || played || failed) {return;}
 			if (!status.audioConnected) {setAudioDetail('Android audio disconnected');}
 			else if (!status.audioConfigured) {setAudioDetail('Waiting for Android audio encoder');}
 			else if (status.audioPackets === 0) {setAudioDetail('Waiting for Android sound');}
 			else if (!configured) {setAudioDetail('Loading Opus decoder');}
 			else if (packetsReceived === 0) {setAudioDetail('Audio packets not reaching webview');}
 			else if (audioContext.state !== 'running') {setAudioDetail('Click emulator to enable audio');}
-		} catch { /* The stream can work while status polling is unavailable. */ }
-	};
-	const interval = window.setInterval(() => {void checkAudio();}, 3000);
-	return () => {
-		disposed = true;
-		window.clearInterval(interval);
-		audioContext.removeEventListener('statechange', syncAudioState);
-		socket.close();
-		gain.disconnect();
-		if (gainRef.current === gain) {gainRef.current = undefined;}
-		void work.then(() => decoder?.free());
+		},
+		setVolume(volume) {
+			if (disposed || volume.max <= volume.min) {return;}
+			const level = Math.max(0, Math.min(1, (volume.current - volume.min) / (volume.max - volume.min)));
+			gain.gain.setTargetAtTime(level, audioContext.currentTime, 0.04);
+		},
+		stop() {
+			disposed = true;
+			audioContext.removeEventListener('statechange', syncAudioState);
+			socket.close();
+			gain.disconnect();
+			void work.then(() => decoder?.free());
+		},
 	};
 }

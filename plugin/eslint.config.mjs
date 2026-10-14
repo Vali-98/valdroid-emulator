@@ -1,10 +1,11 @@
 import typescriptEslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default [{
-    files: ["**/*.ts"],
-}, {
+    files: ["**/*.{ts,tsx}"],
     plugins: {
         "@typescript-eslint": typescriptEslint.plugin,
+        "react-hooks": reactHooks,
     },
 
     languageOptions: {
@@ -14,6 +15,8 @@ export default [{
     },
 
     rules: {
+        "react-hooks/rules-of-hooks": "error",
+        "react-hooks/exhaustive-deps": "error",
         "@typescript-eslint/naming-convention": ["warn", {
             selector: "import",
             format: ["camelCase", "PascalCase"],
