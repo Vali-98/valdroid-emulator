@@ -181,6 +181,7 @@ func main() {
 	socketAddress := flag.String("socket", SOCKET_ADDR, "agent TCP listen address")
 	distDir := flag.String("dist-dir", "dist", "directory containing the agent archive and native libraries")
 	deviceSerial := flag.String("device-serial", "", "Android device serial; installs and starts the agent after listeners are ready")
+	testWebServer := flag.Bool("test-webserver", false, "serve the standalone HTML test page at /")
 	adbPath := flag.String("adb", "adb", "path to adb")
 	bitRate := flag.Int("bit-rate", 10000000, "agent AVC bit rate in bits per second")
 	flag.Parse()
@@ -196,12 +197,17 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.FS(indexFiles)))
+	device := deviceAPI{adbPath: *adbPath, serial: *deviceSerial}
+	if *testWebServer {
+		mux.Handle("/", http.FileServer(http.FS(indexFiles)))
+	}
 	mux.HandleFunc("/stream", mjpegHandler)
 	mux.HandleFunc("/control", controlWebSocketHandler)
 	mux.HandleFunc("/audio", audioWebSocketHandler)
 	mux.HandleFunc("/api/display-state", displayStateHandler)
 	mux.HandleFunc("/api/status", serverStatusHandler)
+	mux.HandleFunc("/api/volume", device.volumeHandler)
+	mux.HandleFunc("/api/upload", device.uploadHandler)
 
 	go startTCP(socketListener)
 	shutdownContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
