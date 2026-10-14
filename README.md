@@ -16,6 +16,8 @@ Build the control server from `control-server/`:
 make
 ```
 
+This also copies the host server binary and Android agent assets into `plugin/bundle/<goos>-<goarch>/`, which is where the VS Code extension loads them from.
+
 Build the VS Code extension from `plugin/`:
 
 ```sh

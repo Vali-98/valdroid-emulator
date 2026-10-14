@@ -33,13 +33,16 @@ import (
 )
 
 const (
-	SOCKET_ADDR      = ":5050"
-	HTTP_ADDR        = ":8080"
-	BOUNDARY         = "frame"
-	videoHeaderSize  = 44
-	codecHeaderSize  = 20
-	maxVideoPacket   = 64 * 1024 * 1024
-	primaryDisplayID = 0
+	SOCKET_ADDR           = ":5050"
+	HTTP_ADDR             = ":8080"
+	BOUNDARY              = "frame"
+	videoHeaderSize       = 44
+	codecHeaderSize       = 20
+	maxVideoPacket        = 64 * 1024 * 1024
+	primaryDisplayID      = 0
+	adbStartupTimeout     = 90 * time.Second
+	agentChannelTimeout   = 60 * time.Second
+	agentLogTailMaxLength = 6000
 )
 
 type streamFrame struct {
@@ -258,7 +261,7 @@ func installAndStartAgent(config agentConfig) error {
 	if config.BitRate < 100000 || config.BitRate > 100000000 {
 		return errors.New("agent bit rate must be between 100000 and 100000000")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), adbStartupTimeout)
 	defer cancel()
 
 	runADB := func(args ...string) ([]byte, error) {
@@ -315,29 +318,57 @@ func installAndStartAgent(config agentConfig) error {
 		config.SocketName,
 		config.BitRate,
 	)
-	if _, err := runADB("shell", "sh", "-c", remoteCommand); err != nil {
+	if _, err := runADB("shell", remoteCommand); err != nil {
 		return err
 	}
 
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(agentChannelTimeout)
 	for time.Now().Before(deadline) {
-		channelStatusMu.RLock()
-		videoReady := videoChannels > 0
-		audioReady := audioChannels > 0
-		channelStatusMu.RUnlock()
-		agentControlMu.Lock()
-		controlReady := agentControl != nil
-		agentControlMu.Unlock()
+		videoReady, audioReady, controlReady := agentChannelsReady()
 		if videoReady && audioReady && controlReady {
 			return nil
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for the agent channels on %s", config.Serial)
+			return fmt.Errorf("timed out waiting for the agent channels on %s (%s)%s", config.Serial, agentChannelSummary(videoReady, audioReady, controlReady), agentLogSuffix(config))
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	return fmt.Errorf("agent process launched on %s but its video/audio/control channels did not connect", config.Serial)
+	videoReady, audioReady, controlReady := agentChannelsReady()
+	return fmt.Errorf("agent process launched on %s but its channels did not connect (%s)%s", config.Serial, agentChannelSummary(videoReady, audioReady, controlReady), agentLogSuffix(config))
+}
+
+func agentChannelsReady() (bool, bool, bool) {
+	channelStatusMu.RLock()
+	videoReady := videoChannels > 0
+	audioReady := audioChannels > 0
+	channelStatusMu.RUnlock()
+	agentControlMu.Lock()
+	controlReady := agentControl != nil
+	agentControlMu.Unlock()
+	return videoReady, audioReady, controlReady
+}
+
+func agentChannelSummary(videoReady, audioReady, controlReady bool) string {
+	return fmt.Sprintf("video=%t audio=%t control=%t", videoReady, audioReady, controlReady)
+}
+
+func agentLogSuffix(config agentConfig) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, config.ADBPath, "-s", config.Serial, "shell", "cat", "/data/local/tmp/.studio/agent.log")
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("; unable to read agent log: %s", strings.TrimSpace(string(output)))
+	}
+	logText := strings.TrimSpace(string(output))
+	if logText == "" {
+		return "; agent log is empty"
+	}
+	if len(logText) > agentLogTailMaxLength {
+		logText = logText[len(logText)-agentLogTailMaxLength:]
+	}
+	return "\nAgent log:\n" + logText
 }
 
 func remoteFileMatches(ctx context.Context, config agentConfig, localPath, remotePath string) bool {
@@ -425,6 +456,11 @@ func serverStatusHandler(w http.ResponseWriter, r *http.Request) {
 	agentControlMu.Lock()
 	status.ControlConnected = agentControl != nil
 	agentControlMu.Unlock()
+	agentStateMu.RLock()
+	status.AgentStarting = agentStarting
+	status.AgentStarted = agentStarted
+	status.AgentError = agentStartError
+	agentStateMu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(status)
 }
@@ -1078,6 +1114,7 @@ func audioWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func displayStateHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	displayID := int32(primaryDisplayID)
 	if value := r.URL.Query().Get("display"); value != "" {
 		parsed, err := strconv.ParseInt(value, 10, 32)

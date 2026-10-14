@@ -56,7 +56,10 @@ class EmulatorViewProvider implements vscode.WebviewViewProvider {
 						await this.refreshTargets();
 						break;
 					case 'start':
-						if (message.value) {await this.startTarget(message.value);}
+						if (message.value) {
+							this.setStatus(message.value.startsWith('avd:') ? 'Starting emulator...' : 'Starting Android agent...', 'online');
+							await this.startTarget(message.value);
+						}
 						break;
 					case 'stop':
 						await this.stopEmulator();
@@ -210,7 +213,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	}
 
 	async function waitForAgent(baseUrl: string, processHandle: ChildProcess): Promise<void> {
-		const deadline = Date.now() + 60000;
+		const deadline = Date.now() + 120000;
 		while (Date.now() < deadline) {
 			if (processHandle.exitCode !== null) {throw new Error(`Control server exited with code ${processHandle.exitCode}.`);}
 			try {

@@ -5,10 +5,16 @@ AGENT_APP := $(AGENT_PROJECT)/app
 AGENT_APK := $(AGENT_APP)/build/outputs/apk/debug/app-debug.apk
 AGENT_LIBS := $(AGENT_APP)/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib
 DIST := dist
+GOOS := $(shell go env GOOS)
+GOARCH := $(shell go env GOARCH)
+HOST_TARGET := $(GOOS)-$(GOARCH)
+SERVER_EXT := $(if $(filter windows,$(GOOS)),.exe,)
+SERVER_BINARY := control-server-$(HOST_TARGET)$(SERVER_EXT)
+PLUGIN_BUNDLE := ../plugin/bundle/$(HOST_TARGET)
 
-.PHONY: all test server agent clean
+.PHONY: all test server agent plugin-bundle clean
 
-all: test server agent
+all: test server agent plugin-bundle
 
 test:
 	go test -race ./...
@@ -16,7 +22,7 @@ test:
 
 server:
 	@mkdir -p $(DIST)
-	CGO_ENABLED=1 go build -o $(DIST)/control-server-$(shell go env GOOS)-$(shell go env GOARCH) .
+	CGO_ENABLED=1 go build -o $(DIST)/$(SERVER_BINARY) .
 
 agent:
 	cd $(AGENT_PROJECT) && bash ./gradlew :app:assembleDebug
@@ -30,6 +36,14 @@ agent:
 	  fi; \
 	done
 
+plugin-bundle: server agent
+	@mkdir -p $(PLUGIN_BUNDLE)
+	cp $(DIST)/$(SERVER_BINARY) $(PLUGIN_BUNDLE)/control-server$(SERVER_EXT)
+	cp $(DIST)/screen-sharing-agent.jar $(PLUGIN_BUNDLE)/screen-sharing-agent.jar
+	rm -rf $(PLUGIN_BUNDLE)/agent-libs
+	cp -R $(DIST)/agent-libs $(PLUGIN_BUNDLE)/agent-libs
+
 clean:
 	rm -f $(DIST)/control-server-* $(DIST)/control-server-*.exe $(DIST)/screen-sharing-agent.jar
 	rm -rf $(DIST)/agent-libs
+	rm -rf $(PLUGIN_BUNDLE)
