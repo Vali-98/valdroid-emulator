@@ -32,7 +32,7 @@ export function TransferFeedback({ dragging, notice, onDismiss }: {
 }) {
 	return <>
 		<div className={`drop-overlay ${dragging ? 'visible' : ''}`} aria-hidden={!dragging}>
-			<div className="drop-prompt"><Upload size={24} /><span>Drop to send to device</span><small>Files go to Downloads</small></div>
+			<div className="drop-prompt"><Upload size={24} /><span>Drop to send to device</span><small>Install APKs or send files to Downloads</small></div>
 		</div>
 		{notice && <TransferToast key={notice.startedAt} notice={notice} onDismiss={onDismiss} />}
 	</>;

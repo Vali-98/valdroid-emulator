@@ -19,7 +19,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	shutdownConsole = () => console.dispose();
 	let session: EmulatorSession;
 	const provider = new EmulatorViewProvider(context, discover, value => session.startTarget(value), () => session.stop(),
-		() => session.deviceSerial, (file, name, serial, signal, progress) => session.pushFile(file, name, serial, signal, progress), output);
+		() => session.deviceSerial, (file, name, serial, signal, progress) => session.transferFile(file, name, serial, signal, progress), output);
 	session = new EmulatorSession(context.extensionPath, adbPath, emulatorPath, bitRate, output, provider, serial => console.setDevice(serial));
 	shutdownExtension = async () => {await provider.cancelUploads(); await session.stop();};
 

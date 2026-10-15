@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { EmulatorTarget, ExtensionMessage, HostMessage, SessionState } from '../shared/protocol';
 import { webviewHtml } from './html';
 import { applyInitialPanelSize } from './initialPanelSize';
-import { FileUploadReceiver, type PushFile } from '../lib/FileUploadReceiver';
+import { FileUploadReceiver, type TransferFile } from '../lib/FileUploadReceiver';
 
 export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
@@ -16,13 +16,13 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		private readonly startTarget: (value: string) => Promise<void>,
 		private readonly stopEmulator: () => Promise<void>,
 		private readonly getSerial: () => string | undefined,
-		private readonly pushFile: PushFile,
+		private readonly transferFile: TransferFile,
 		private readonly output: vscode.OutputChannel,
 	) {}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
 		void this.uploads?.dispose();
-		const uploads = new FileUploadReceiver(this.getSerial, this.pushFile);
+		const uploads = new FileUploadReceiver(this.getSerial, this.transferFile);
 		this.uploads = uploads;
 		this.view = webviewView;
 		webviewView.webview.options = {
@@ -37,10 +37,10 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 			try {
 				if (message.type === 'upload-start' || message.type === 'upload-chunk' || message.type === 'upload-finish' || message.type === 'upload-cancel') {
 					try {
-						const path = await uploads.handle(message, percent => {
+						const result = await uploads.handle(message, percent => {
 							void webviewView.webview.postMessage({ type: 'upload-progress', id: message.id, percent } satisfies ExtensionMessage);
 						});
-						void webviewView.webview.postMessage({ type: 'upload-result', id: message.id, requestId: message.requestId, path } satisfies ExtensionMessage);
+						void webviewView.webview.postMessage({ type: 'upload-result', id: message.id, requestId: message.requestId, result } satisfies ExtensionMessage);
 					} catch (error) {
 						const detail = error instanceof Error ? error.message : String(error);
 						this.output.appendLine(`File transfer failed: ${detail}`);

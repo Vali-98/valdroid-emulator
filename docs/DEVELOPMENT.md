@@ -5,6 +5,8 @@ and browser resources. Their message contract lives in `src/shared/protocol.ts`.
 
 - `src/extension.ts`: VS Code activation, commands, and dependency wiring.
 - `src/lib/`: ADB discovery, child processes, and emulator/server lifecycle.
+- `src/lib/AdbFileTransfer.ts`: Serial-scoped APK installation and Downloads
+  transfers. `FileUploadReceiver.ts` stages webview chunks and cleans up local files.
 - `src/view/`: Webview registration, typed host messages, and HTML/CSP generation.
 - `src/webview.tsx`: Browser entry point and QueryClient provider.
 - `src/console.tsx`, `src/console/`: Virtualized ADB/logcat panel and console styles.

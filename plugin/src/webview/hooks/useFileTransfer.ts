@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { uploadFile } from '../upload';
+import { isApk } from '../../shared/protocol';
 
 interface TransferRequest {
 	files: File[];
@@ -22,16 +23,21 @@ export function useFileTransfer() {
 	const [dropError, setDropError] = React.useState('');
 	const mutation = useMutation({
 		mutationFn: async ({ files, controller }: TransferRequest) => {
+			let installed = 0;
 			for (const [index, file] of files.entries()) {
 				if (controller.signal.aborted) {throw new Error('Upload canceled');}
-				const message = `Sending ${file.name}${files.length > 1 ? ` (${index + 1}/${files.length})` : ''}`;
+				const message = `${isApk(file.name) ? 'Installing' : 'Sending'} ${file.name}${files.length > 1 ? ` (${index + 1}/${files.length})` : ''}`;
 				setProgress({ message, percent: 0 });
-				await uploadFile(file, controller.signal, percent => {
+				const result = await uploadFile(file, controller.signal, percent => {
 					if (!controller.signal.aborted) {setProgress({ message, percent });}
 				});
+				if (result.kind === 'installed') {installed++;}
 			}
+			const downloaded = files.length - installed;
+			const completed = [installed ? `${installed} ${installed === 1 ? 'APK' : 'APKs'} installed` : '',
+				downloaded ? `${downloaded} ${downloaded === 1 ? 'file' : 'files'} sent to Downloads` : ''].filter(Boolean).join('; ');
 			return {
-				message: files.length === 1 ? `${files[0].name} sent to Downloads` : `${files.length} files sent to Downloads`,
+				message: files.length === 1 ? `${files[0].name} ${installed ? 'installed' : 'sent to Downloads'}` : completed,
 				finishedAt: Date.now(),
 			};
 		},
@@ -47,7 +53,7 @@ export function useFileTransfer() {
 		const controller = new AbortController();
 		activeRef.current = controller;
 		setDropError('');
-		setProgress({ message: `Sending ${files[0].name}`, percent: 0 });
+		setProgress({ message: `${isApk(files[0].name) ? 'Installing' : 'Sending'} ${files[0].name}`, percent: 0 });
 		mutation.mutate({ files, controller, startedAt: Date.now() });
 	};
 	let notice: TransferNotice | undefined;

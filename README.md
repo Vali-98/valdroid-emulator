@@ -1,7 +1,8 @@
 # Valdroid Emulator
 
 Stream and control Android emulators inside VS Code, with audio, device controls,
-drag-and-drop transfers to Downloads, and a synchronized ADB/logcat console.
+drag-and-drop APK installation and file transfers to Downloads, and a synchronized
+ADB/logcat console.
 
 - [Features and setup](plugin/README.md)
 - [Development and architecture](docs/DEVELOPMENT.md)

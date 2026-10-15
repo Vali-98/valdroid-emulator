@@ -1,4 +1,4 @@
-import { maxUploadSize, uploadChunkSize, type ExtensionMessage, type UploadCommand, type UploadReply } from '../shared/protocol';
+import { isApk, maxUploadSize, uploadChunkSize, type ExtensionMessage, type FileTransferResult, type UploadCommand, type UploadReply } from '../shared/protocol';
 import { vscode } from './vscode';
 
 function readChunk(blob: Blob, signal: AbortSignal): Promise<string> {
@@ -15,7 +15,7 @@ function readChunk(blob: Blob, signal: AbortSignal): Promise<string> {
 	});
 }
 
-export async function uploadFile(file: File, signal: AbortSignal, onProgress: (percent: number) => void): Promise<string> {
+export async function uploadFile(file: File, signal: AbortSignal, onProgress: (percent: number) => void): Promise<FileTransferResult> {
 	if (signal.aborted) {throw new Error('Upload canceled');}
 	if (file.size > maxUploadSize) {throw new Error('File exceeds the 4 GiB upload limit');}
 	const id = crypto.randomUUID();
@@ -50,9 +50,12 @@ export async function uploadFile(file: File, signal: AbortSignal, onProgress: (p
 			await request({ type: 'upload-chunk', id, offset, data });
 		}
 		const result = await request({ type: 'upload-finish', id }, 16 * 60 * 1000);
-		if (!result.path) {throw new Error('The extension did not confirm a destination on the device');}
+		const outcome = result.result;
+		if (!outcome || (isApk(file.name) ? outcome.kind !== 'installed' : outcome.kind !== 'download' || !outcome.path)) {
+			throw new Error(isApk(file.name) ? 'The extension did not confirm APK installation' : 'The extension did not confirm a destination on the device');
+		}
 		onProgress(100);
-		return result.path;
+		return outcome;
 	} catch (error) {
 		vscode.postMessage({ type: 'upload-cancel', id, requestId: crypto.randomUUID() });
 		throw error;

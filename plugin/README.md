@@ -9,8 +9,10 @@ console that follows the device you are using.
 - Stream the display and audio, with pointer and keyboard input.
 - Power, Home, Back, recent-apps, mute, and volume controls alongside the screen.
 - Fit the emulator to the available view, without scrolling off the bottom.
-- Drop files onto the display to send them to Downloads, with transfer progress.
-  APK drops transfer files; they do not automatically install them.
+- Drop APKs onto the display to install them, or other files to send them to
+  Downloads, with progress and completion feedback. APK installation supports
+  updating an existing app while keeping its data, as well as test APKs. Only
+  drop APKs you trust; Android signature/version restrictions still apply.
 - Colored logcat, package and severity filters, text search, pause, follow, copy,
   and bounded scrollback in the **Valdroid** console.
 - Device-scoped ADB commands, command history, and cancellation.

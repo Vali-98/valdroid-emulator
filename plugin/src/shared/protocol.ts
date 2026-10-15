@@ -17,10 +17,13 @@ export type UploadCommand =
 	| { type: 'upload-cancel'; id: string };
 
 export type UploadRequest = UploadCommand & { requestId: string };
-export type UploadReply = { type: 'upload-result'; id: string; requestId: string; path?: string; error?: string };
+export type FileTransferResult = { kind: 'download'; path: string } | { kind: 'installed' };
+export type UploadReply = { type: 'upload-result'; id: string; requestId: string; result?: FileTransferResult; error?: string };
 export type UploadProgress = { type: 'upload-progress'; id: string; percent: number };
 export const uploadChunkSize = 256 * 1024;
 export const maxUploadSize = 4 * 1024 * 1024 * 1024;
+
+export function isApk(name: string): boolean {return name.toLowerCase().endsWith('.apk');}
 
 export interface StatusMessage {
 	type: 'status';

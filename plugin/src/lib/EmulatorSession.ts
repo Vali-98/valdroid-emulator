@@ -6,6 +6,8 @@ import { delay, platformTarget, runFile, terminateProcess, waitForExit } from '.
 import { listTargets } from './targets';
 import type { EmulatorViewProvider } from '../view/EmulatorViewProvider';
 import type { ServerStatus } from '../shared/protocol';
+import { AdbFileTransfer } from './AdbFileTransfer';
+import type { TransferFile } from './FileUploadReceiver';
 
 export class EmulatorSession {
 	private serverProcess?: ChildProcess;
@@ -13,6 +15,7 @@ export class EmulatorSession {
 	private emulatorSerial?: string;
 	private activeSerial?: string;
 	private stoppingEmulator?: Promise<void>;
+	private readonly fileTransfer: AdbFileTransfer;
 
 	constructor(
 		private readonly extensionPath: string,
@@ -22,40 +25,11 @@ export class EmulatorSession {
 		private readonly output: vscode.OutputChannel,
 		private readonly provider: EmulatorViewProvider,
 		private readonly onDeviceChanged: (serial?: string) => void = () => undefined,
-	) {}
+	) {this.fileTransfer = new AdbFileTransfer(adbPath, () => this.activeSerial, output);}
 
 	get deviceSerial(): string | undefined {return this.activeSerial;}
 
-	async pushFile(file: string, name: string, serial: string, signal: AbortSignal, progress: (percent: number) => void): Promise<string> {
-		if (serial !== this.activeSerial) {throw new Error('The selected Android device is no longer connected');}
-		const destination = `/sdcard/Download/${name}`;
-		this.output.appendLine(`Sending ${name} to ${serial}:${destination}`);
-		await new Promise<void>((resolve, reject) => {
-			const child = spawn(this.adbPath, ['-s', serial, 'push', file, destination], { signal, stdio: ['ignore', 'pipe', 'pipe'] });
-			let details = '';
-			const timer = setTimeout(() => {child.kill(); reject(new Error('ADB file transfer timed out'));}, 15 * 60 * 1000);
-			const receive = (data: Buffer) => {
-				const text = data.toString();
-				details = (details + text).slice(-8192);
-				for (const match of text.matchAll(/(\d+)%/g)) {progress(Math.min(99, Number(match[1])));}
-			};
-			child.stdout.on('data', receive);
-			child.stderr.on('data', receive);
-			child.once('error', error => {clearTimeout(timer); reject(signal.aborted ? new Error('Upload canceled') : error);});
-			child.once('close', code => {
-				clearTimeout(timer);
-				if (code === 0 && !signal.aborted) {resolve();}
-				else {reject(new Error(signal.aborted ? 'Upload canceled' : `ADB push failed: ${details.trim() || `exit ${code}`}`));}
-			});
-		});
-		if (signal.aborted || serial !== this.activeSerial) {throw new Error('Device disconnected during file transfer');}
-		const uri = `file://${destination.split('/').map(segment => encodeURIComponent(segment)).join('/')}`;
-		await runFile(this.adbPath, ['-s', serial, 'shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', `'${uri}'`])
-			.catch(error => this.output.appendLine(`Could not refresh Downloads: ${String(error)}`));
-		progress(100);
-		this.output.appendLine(`Sent ${name} to ${destination}`);
-		return destination;
-	}
+	transferFile: TransferFile = (...args) => this.fileTransfer.send(...args);
 
 	async startTarget(value: string): Promise<void> {
 		try {

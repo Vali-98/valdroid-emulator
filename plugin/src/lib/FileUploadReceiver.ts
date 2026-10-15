@@ -1,11 +1,12 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { maxUploadSize, uploadChunkSize, type UploadRequest } from '../shared/protocol';
+import { isApk, maxUploadSize, uploadChunkSize, type FileTransferResult, type UploadRequest } from '../shared/protocol';
 
 interface Upload {
 	directory: string;
 	file: fs.FileHandle;
+	localPath: string;
 	name: string;
 	size: number;
 	written: number;
@@ -14,15 +15,15 @@ interface Upload {
 	finishing: boolean;
 }
 
-export type PushFile = (file: string, name: string, serial: string, signal: AbortSignal, progress: (percent: number) => void) => Promise<string>;
+export type TransferFile = (file: string, name: string, serial: string, signal: AbortSignal, progress: (percent: number) => void) => Promise<FileTransferResult>;
 
 export class FileUploadReceiver {
 	private uploads = new Map<string, Upload>();
 	private accepting = true;
 
-	constructor(private readonly getSerial: () => string | undefined, private readonly pushFile: PushFile) {}
+	constructor(private readonly getSerial: () => string | undefined, private readonly transferFile: TransferFile) {}
 
-	async handle(message: UploadRequest, progress: (percent: number) => void): Promise<string | undefined> {
+	async handle(message: UploadRequest, progress: (percent: number) => void): Promise<FileTransferResult | undefined> {
 		try {
 			if (message.type === 'upload-cancel') {await this.cancel(message.id); return;}
 			if (!this.accepting) {throw new Error('The emulator view is closed');}
@@ -33,10 +34,11 @@ export class FileUploadReceiver {
 				if (!message.name || message.name === '.' || message.name === '..' || /[/\\\x00\r\n]/.test(message.name)) {throw new Error('Invalid filename');}
 				if (!Number.isSafeInteger(message.size) || message.size < 0 || message.size > maxUploadSize) {throw new Error('File exceeds the 4 GiB upload limit');}
 				const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'valdroid-upload-'));
+				const localPath = path.join(directory, isApk(message.name) ? 'package.apk' : 'data');
 				let file: fs.FileHandle;
-				try {file = await fs.open(path.join(directory, 'data'), 'wx');}
+				try {file = await fs.open(localPath, 'wx');}
 				catch (error) {await fs.rm(directory, { recursive: true, force: true }); throw error;}
-				const upload = { directory, file, name: message.name, size: message.size, written: 0, serial, controller: new AbortController(), finishing: false };
+				const upload = { directory, file, localPath, name: message.name, size: message.size, written: 0, serial, controller: new AbortController(), finishing: false };
 				this.uploads.set(message.id, upload);
 				if (!this.accepting || this.getSerial() !== serial) {throw new Error('Device disconnected during file transfer');}
 				return;
@@ -63,10 +65,10 @@ export class FileUploadReceiver {
 			if (upload.written !== upload.size) {throw new Error('File transfer is incomplete');}
 			upload.finishing = true;
 			await upload.file.close();
-			const destination = await this.pushFile(path.join(upload.directory, 'data'), upload.name, upload.serial,
-				upload.controller.signal, percent => progress(50 + Math.round(percent / 2)));
+			const result = await this.transferFile(upload.localPath, upload.name, upload.serial,
+				upload.controller.signal, percent => progress(50 + Math.floor(percent / 2)));
 			await this.cancel(message.id);
-			return destination;
+			return result;
 		} catch (error) {
 			await this.cancel(message.id);
 			throw error;
