@@ -13,7 +13,7 @@ SERVER_BINARY := control-server-$(HOST_TARGET)$(SERVER_EXT)
 PLUGIN_BUNDLE := ../plugin/bundle/$(HOST_TARGET)
 GO_TAGS ?=
 
-.PHONY: all test benchmark frameprobe server agent plugin-bundle clean
+.PHONY: all test benchmark frameprobe resourceprobe server agent plugin-bundle clean
 
 all: test server agent plugin-bundle
 
@@ -27,6 +27,10 @@ benchmark:
 frameprobe:
 	@mkdir -p $(DIST)
 	go build -o $(DIST)/frameprobe ./cmd/frameprobe
+
+resourceprobe:
+	@mkdir -p $(DIST)
+	go build -o $(DIST)/resourceprobe ./cmd/resourceprobe
 
 server:
 	@mkdir -p $(DIST)
@@ -53,6 +57,7 @@ plugin-bundle: server agent
 
 clean:
 	rm -f $(DIST)/frameprobe
+	rm -f $(DIST)/resourceprobe
 	rm -f $(DIST)/control-server-* $(DIST)/control-server-*.exe $(DIST)/screen-sharing-agent.jar
 	rm -rf $(DIST)/agent-libs
 	rm -rf $(PLUGIN_BUNDLE)

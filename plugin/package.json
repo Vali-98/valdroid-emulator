@@ -11,6 +11,8 @@
     "Other"
   ],
   "activationEvents": [
+    "onView:valdroidConsole.view",
+    "onCommand:valdroid-emulator.console",
     "onView:valdroidEmulator.view",
     "onCommand:valdroid-emulator.start",
     "onCommand:valdroid-emulator.stop",
@@ -30,10 +32,29 @@
       {
         "command": "valdroid-emulator.stop",
         "title": "Valdroid: Stop Stream"
+      },
+      {
+        "command": "valdroid-emulator.console",
+        "title": "Valdroid: Show ADB Console",
+        "icon": "$(terminal)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "valdroid-emulator.console",
+          "when": "view == valdroidEmulator.view",
+          "group": "navigation"
+        }
+      ]
+    },
     "viewsContainers": {
       "panel": [
+        {
+          "id": "valdroidConsole",
+          "title": "Valdroid",
+          "icon": "media/android.svg"
+        },
         {
           "id": "valdroidEmulator",
           "title": "Android Emulator",
@@ -42,6 +63,13 @@
       ]
     },
     "views": {
+      "valdroidConsole": [
+        {
+          "id": "valdroidConsole.view",
+          "name": "ADB Console",
+          "type": "webview"
+        }
+      ],
       "valdroidEmulator": [
         {
           "id": "valdroidEmulator.view",
@@ -89,6 +117,7 @@
     "@testing-library/react": "^16.3.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
+    "@types/shell-quote": "^1.7.5",
     "@types/vscode": "^1.140.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.5.0",
@@ -101,6 +130,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.2",
+    "@tanstack/react-virtual": "^3.14.19",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "file-selector": "^2.1.2",
@@ -108,6 +138,7 @@
     "opus-decoder": "^0.7.12",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-dropzone": "^14.3.8"
+    "react-dropzone": "^14.3.8",
+    "shell-quote": "^1.12.0"
   }
 }

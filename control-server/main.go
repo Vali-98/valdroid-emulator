@@ -53,6 +53,7 @@ func main() {
 	mux.HandleFunc("/api/display-state", displayStateHandler)
 	mux.HandleFunc("/api/status", serverStatusHandler)
 	mux.HandleFunc("/api/performance", performanceHandler)
+	mux.HandleFunc("/api/resources", resourcesHandler)
 	mux.HandleFunc("/api/volume", device.volumeHandler)
 
 	go startTCP(socketListener)

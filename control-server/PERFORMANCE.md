@@ -81,6 +81,72 @@ On the same Apple M4 / Android 36 ARM64 emulator, the 1080x2400 live test with a
 - Replay pacing depends on the load generator's scheduling. Compare arrival/source intervals before attributing a gap to decoding. Repeat tests without benchmarks/builds running concurrently.
 - MJPEG has significant bandwidth and browser decode overhead. A slow webview, remote host, overloaded emulator, or slower platform codec can still miss 60fps even when the server replay passes. Linux and Windows native execution must be measured on those hosts.
 
+## CPU and RAM
+
+`resourceprobe` samples the server **from a separate process** using gopsutil. No
+sampling timer runs in the server's frame path. RSS includes resident Go and
+native decoder/JPEG allocations; Go heap statistics alone would miss native
+memory. `/api/resources` reports PID, live/reserved Go heap, total allocations,
+GC cycles/pause time, goroutines, and cgo calls. The probe reads it just before
+and after the measurement window, not on every frame.
+
+```sh
+make server frameprobe resourceprobe
+./dist/resourceprobe --server http://127.0.0.1:18080 \
+  --duration 30s --warmup 5s --label idle
+```
+
+Start a separate server and the replay described above. While replay is running,
+sample the same process in another terminal:
+
+```sh
+./dist/frameprobe --url http://127.0.0.1:18080 \
+  --agent 127.0.0.1:15050 --replay /tmp/valdroid-perf.h264 \
+  --duration 70s --warmup 3s --assert-target
+```
+
+```sh
+./dist/resourceprobe --server http://127.0.0.1:18080 \
+  --duration 60s --warmup 5s --label replay-60fps
+```
+
+For a real agent, use the frame-clock app and replace the replay command with
+`frameprobe --exercise-input --duration 70s --assert-target`. To monitor an older
+server, use `resourceprobe --pid <server-pid> --duration 30s`; Go snapshots require
+the new endpoint. `--server` only accepts loopback URLs to avoid accidentally
+sampling an unrelated local PID reported by a remote server. A process exit or
+PID reuse fails the measurement rather than silently combining processes.
+
+CPU percentages use **100% = one fully occupied CPU core**, and can exceed 100%
+for multithreaded workloads. Mean CPU is computed from total user+system CPU time
+over actual elapsed time; p95/max are interval samples. RSS mean/p95/max are
+sampled values in MiB, not the operating system's lifetime peak. The default
+interval is 250ms. Start/end RSS and growth are included. Sampling is approximate,
+and OS permissions may restrict inspecting other users' processes.
+
+Measured on the same Apple M4 (10 logical CPUs), ImageIO JPEG95, 1080x2400 replay,
+one MJPEG subscriber:
+
+| Scenario | Mean CPU (one core = 100%) | Mean RSS | Sampled peak RSS |
+| --- | ---: | ---: | ---: |
+| Fresh idle server, 10 seconds | below sampling resolution | 12.23 MiB | 12.23 MiB |
+| Continuous 60fps, first 30-second sample | 36.91% | 122.86 MiB | 122.94 MiB |
+| Continuous 60fps, second 30-second sample | 35.62% | 123.80 MiB | 124.94 MiB |
+
+Both replays delivered exactly 60fps. RSS increased 0.11 MiB and 1.61 MiB across
+the respective sample windows. In the aligned second sample, live Go heap was
+27.29 MiB at both ends, with 37 collections and 1.73ms **total** GC pause time over
+30 seconds. These measurements do not indicate an urgent CPU/RAM bottleneck on
+this host. They are not proof of leak freedom: repeat for several minutes, after
+rotation/reconnection and with multiple subscribers. Some retained pool/native
+allocator memory is expected after streaming stops. Sustained growth across
+comparable steady-state windows is more actionable than a single high-water mark.
+
+The figures exclude the Android emulator/agent, browser/webview, load generator,
+and CPU/GPU work performed in separate OS services. Native execution on Windows
+and Linux still needs measurement. Compare resource reports alongside frame
+pacing, since lower CPU achieved by dropping frames is not an optimization win.
+
 ## Regression Checks
 
 ```sh

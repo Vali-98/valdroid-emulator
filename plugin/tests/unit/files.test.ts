@@ -5,7 +5,7 @@ import { filesFromEvent } from '../../src/webview/files';
 import { deferred } from '../helpers';
 
 vi.mock('file-selector', () => ({ fromEvent: vi.fn() }));
-beforeEach(() => vi.mocked(fromEvent).mockReset());
+beforeEach(() => { vi.mocked(fromEvent).mockReset(); });
 const event = (files: File[], type = 'drop') => ({ type, dataTransfer: { files } }) as unknown as DropEvent;
 
 it('delegates hover metadata and successful file/directory extraction to the library', async () => {

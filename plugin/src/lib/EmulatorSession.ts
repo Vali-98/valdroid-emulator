@@ -21,6 +21,7 @@ export class EmulatorSession {
 		private readonly bitRate: number,
 		private readonly output: vscode.OutputChannel,
 		private readonly provider: EmulatorViewProvider,
+		private readonly onDeviceChanged: (serial?: string) => void = () => undefined,
 	) {}
 
 	get deviceSerial(): string | undefined {return this.activeSerial;}
@@ -116,6 +117,7 @@ export class EmulatorSession {
 		], { cwd: bundleDir, stdio: 'pipe' });
 		const child = this.serverProcess;
 		this.activeSerial = serial;
+		this.onDeviceChanged(serial);
 		child.stdout?.on('data', data => this.output.append(data.toString()));
 		child.stderr?.on('data', data => this.output.append(data.toString()));
 		child.on('exit', code => {
@@ -123,6 +125,7 @@ export class EmulatorSession {
 			if (this.serverProcess === child) {
 				this.serverProcess = undefined;
 				this.activeSerial = undefined;
+				this.onDeviceChanged(undefined);
 				this.provider.setServer(undefined);
 				void runFile(this.adbPath, ['-s', serial, 'reverse', '--remove', 'localabstract:screen-sharing-agent']).catch(() => undefined);
 			}
@@ -163,6 +166,7 @@ export class EmulatorSession {
 		this.provider.setStatus('Stopping Android agent...', 'online');
 		const serial = this.activeSerial;
 		this.activeSerial = undefined;
+		this.onDeviceChanged(undefined);
 		const child = this.serverProcess;
 		this.serverProcess = undefined;
 		if (child) {await terminateProcess(child);}

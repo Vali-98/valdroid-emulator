@@ -7,6 +7,9 @@ and browser resources. Their message contract lives in `src/shared/protocol.ts`.
 - `src/lib/`: ADB discovery, child processes, and emulator/server lifecycle.
 - `src/view/`: Webview registration, typed host messages, and HTML/CSP generation.
 - `src/webview.tsx`: Browser entry point and QueryClient provider.
+- `src/console.tsx`, `src/console/`: Virtualized ADB/logcat panel and console styles.
+- `src/lib/AdbConsole.ts`: Serial-scoped logcat, command execution, metadata, and process cleanup.
+- `src/shared/console.ts`: Console messages, logcat parsing, and filters.
 - `src/webview/App.tsx`: Device selection and the connected emulator workspace.
 - `src/webview/components/`: Header, picker, screen, controls, transfer feedback,
   and debug footer.
@@ -18,6 +21,10 @@ and browser resources. Their message contract lives in `src/shared/protocol.ts`.
 - `src/webview/styles.css`: Styles bundled into `dist/webview.css` by esbuild.
 
 ## Library Choices
+
+[TanStack Virtual](https://tanstack.com/virtual/latest/docs/framework/react/react-virtual)
+renders only visible console rows. `shell-quote` parses quoted ADB arguments;
+Android shell commands are passed directly to `adb shell`, never a host shell.
 
 [TanStack Query](https://tanstack.com/query/latest/docs/framework/react/overview)
 owns polling, cancellation, and upload mutation status. Queries consume their
@@ -57,3 +64,31 @@ after rebuilding. The webview loads both JS and CSS from `dist/`.
 Run `npm test` for type checking and the Vitest/Testing Library suite, or
 `npm run test:watch` while editing. Tests cover host messages, control sockets,
 query cancellation, coordinate mapping, uploads, and drag/drop failure recovery.
+
+## ADB Console
+
+Open the **Valdroid** bottom-panel tab, use **Valdroid: Show ADB Console** in the
+Command Palette, or click the terminal icon in the Emulator view's title bar.
+The console follows the emulator's selected device and can independently select
+any connected ADB device.
+
+The panel includes colored logcat severity, an installed-package selector,
+minimum log-level filtering, case-insensitive text search with highlighted
+matches, pause/resume, follow-latest, copy-filtered-output, and clear. Clear affects
+local scrollback only, not the Android log buffer. Logcat parsing follows Android's
+[threadtime format](https://developer.android.com/tools/logcat). Package association
+uses a process-name snapshot refreshed every five seconds, including `:worker`
+processes; terminated processes absent from the initial snapshot may remain
+unattributed. Search and filtering operate over the latest 5,000 retained lines.
+
+Enter commands such as `shell getprop ro.product.model`, `shell pm list packages`,
+or `install "/path/My App.apk"` at the ADB prompt. The selected serial is always
+supplied by the extension. Up/Down navigates command history. Commands stream
+stdout/stderr, can be canceled, and time out after five minutes. This is a command
+runner and log viewer, not an interactive PTY: interactive shells, editors, and
+password prompts are not supported. Android shell pipes/quoting work after `shell`;
+host shell operators are rejected.
+
+Logcat starts only after the console view is opened, batches UI updates, and keeps
+bounded scrollback. Device changes and extension shutdown stop its child processes;
+disconnecting retains local diagnostic output until cleared or a new device is selected.

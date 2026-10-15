@@ -8,7 +8,7 @@ vi.mock('../../src/webview/upload', () => ({ uploadFile: vi.fn() }));
 beforeEach(() => {vi.mocked(uploadFile).mockReset().mockResolvedValue('/download/file.txt'); vi.stubGlobal('isSecureContext', true);});
 
 function DropTarget() {
-	const drop = useFileDrop('http://localhost');
+	const drop = useFileDrop();
 	return <div {...drop.rootProps} data-testid="drop-root"><input {...drop.inputProps} />
 		<span data-testid="active">{String(drop.dragging)}</span><span data-testid="notice">{drop.notice?.message}</span>
 	</div>;

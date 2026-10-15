@@ -55,14 +55,24 @@ async function main() {
 		outfile: 'dist/webview.js',
 		...shared,
 	});
+	const consoleCtx = await esbuild.context({
+		entryPoints: ['src/console.tsx'],
+		format: 'iife',
+		platform: 'browser',
+		outfile: 'dist/console.js',
+		...shared,
+	});
 	if (watch) {
 		await extensionCtx.watch();
 		await webviewCtx.watch();
+		await consoleCtx.watch();
 	} else {
 		await extensionCtx.rebuild();
 		await webviewCtx.rebuild();
+		await consoleCtx.rebuild();
 		await extensionCtx.dispose();
 		await webviewCtx.dispose();
+		await consoleCtx.dispose();
 	}
 }
 

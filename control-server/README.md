@@ -57,3 +57,5 @@ Video queues retain only the newest pending frame. A slow encoder or viewer drop
 `--jpeg-quality` defaults to 95. macOS uses the system ImageIO encoder without additional runtime dependencies. Linux/Windows default to the portable Go encoder; build with `make server GO_TAGS=turbojpeg` to use SIMD-accelerated libjpeg-turbo when its development libraries and `pkg-config` are available. Lower JPEG quality can reduce CPU and bandwidth, but does not change the agent's AVC bit rate.
 
 See [PERFORMANCE.md](PERFORMANCE.md) for measurements, automated input, reproducible 60fps replay/live tests, and the limits of these latency measurements.
+
+`make resourceprobe` builds an external CPU/RAM sampler. Run `./dist/resourceprobe --server http://127.0.0.1:8080 --duration 30s --label live-60fps` while the server streams. It reports per-core CPU percentages and native-inclusive RSS, plus Go heap/GC snapshots from `/api/resources`. Use `--pid` instead for servers without that endpoint. See [PERFORMANCE.md](PERFORMANCE.md#cpu-and-ram) for idle/load comparisons and interpretation.

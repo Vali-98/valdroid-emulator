@@ -4,7 +4,7 @@ import { useHostSession } from '../../src/webview/hooks/useHostSession';
 
 const bridge = vi.hoisted(() => ({ postMessage: vi.fn() }));
 vi.mock('../../src/webview/vscode', () => ({ vscode: bridge }));
-beforeEach(() => bridge.postMessage.mockClear());
+beforeEach(() => { bridge.postMessage.mockClear(); });
 const receive = (data: object) => act(() => {window.dispatchEvent(new MessageEvent('message', { data }));});
 
 it('announces readiness and removes its listener on unmount', () => {

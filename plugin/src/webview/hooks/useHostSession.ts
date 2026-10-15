@@ -8,7 +8,7 @@ interface HostState {
 	session: StatusMessage;
 }
 
-type Action = ExtensionMessage | { type: 'select'; value: string };
+type Action = Extract<ExtensionMessage, { type: 'targets' | 'status' }> | { type: 'select'; value: string };
 
 function reducer(state: HostState, message: Action): HostState {
 	switch (message.type) {
