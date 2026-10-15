@@ -10,11 +10,9 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
-	"control_server/internal/diagnostics"
 	"github.com/shirou/gopsutil/v4/process"
 )
 
@@ -31,31 +29,21 @@ type resourceSummary struct {
 }
 
 type report struct {
-	PID          int32                     `json:"pid"`
-	Label        string                    `json:"label"`
-	LogicalCPUs  int                       `json:"logicalCPUs"`
-	Duration     float64                   `json:"durationSeconds"`
-	Samples      int                       `json:"samples"`
-	CPUPercent   resourceSummary           `json:"cpuPercentOneCore"`
-	RSSMiB       resourceSummary           `json:"rssMiB"`
-	RSSStartMiB  float64                   `json:"rssStartMiB"`
-	RSSEndMiB    float64                   `json:"rssEndMiB"`
-	RSSDeltaMiB  float64                   `json:"rssDeltaMiB"`
-	RuntimeStart *diagnostics.RuntimeStats `json:"runtimeStart,omitempty"`
-	RuntimeEnd   *diagnostics.RuntimeStats `json:"runtimeEnd,omitempty"`
+	PID         int32           `json:"pid"`
+	Label       string          `json:"label"`
+	LogicalCPUs int             `json:"logicalCPUs"`
+	Duration    float64         `json:"durationSeconds"`
+	Samples     int             `json:"samples"`
+	CPUPercent  resourceSummary `json:"cpuPercentOneCore"`
+	RSSMiB      resourceSummary `json:"rssMiB"`
+	RSSStartMiB float64         `json:"rssStartMiB"`
+	RSSEndMiB   float64         `json:"rssEndMiB"`
+	RSSDeltaMiB float64         `json:"rssDeltaMiB"`
 }
 
 func summarizeResources(values []float64) resourceSummary {
-	if len(values) == 0 {
-		return resourceSummary{}
-	}
-	values = append([]float64(nil), values...)
-	sort.Float64s(values)
-	var sum float64
-	for _, v := range values {
-		sum += v
-	}
-	return resourceSummary{sum / float64(len(values)), values[(len(values)*95+99)/100-1], values[len(values)-1]}
+	stats := summarize(values)
+	return resourceSummary{stats.Mean, stats.P95, stats.Max}
 }
 
 func summarizeSamples(pid int32, label string, samples []sample) (report, error) {
@@ -82,33 +70,35 @@ func summarizeSamples(pid int32, label string, samples []sample) (report, error)
 	return report{PID: pid, Label: label, LogicalCPUs: runtime.NumCPU(), Duration: duration, Samples: len(samples), CPUPercent: cpuStats, RSSMiB: summarizeResources(rss), RSSStartMiB: start, RSSEndMiB: end, RSSDeltaMiB: end - start}, nil
 }
 
-func readRuntime(base string) (*diagnostics.RuntimeStats, error) {
+func discoverPID(base string) (int32, error) {
 	parsed, err := url.Parse(base)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	host := parsed.Hostname()
 	ip := net.ParseIP(host)
 	if (parsed.Scheme != "http" && parsed.Scheme != "https") || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
-		return nil, errors.New("server must be a local HTTP(S) URL; sampling remote PIDs is unsafe")
+		return 0, errors.New("server must be a local HTTP(S) URL; sampling remote PIDs is unsafe")
 	}
 	client := &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Get(strings.TrimRight(base, "/") + "/api/resources")
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("resources HTTP status: %d", response.StatusCode)
+		return 0, fmt.Errorf("resources HTTP status: %d", response.StatusCode)
 	}
-	var snapshot diagnostics.RuntimeStats
+	var snapshot struct {
+		PID int32 `json:"pid"`
+	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&snapshot); err != nil {
-		return nil, err
+		return 0, err
 	}
 	if snapshot.PID <= 0 {
-		return nil, errors.New("invalid server PID")
+		return 0, errors.New("invalid server PID")
 	}
-	return &snapshot, nil
+	return snapshot.PID, nil
 }
 
 func readSample(ctx context.Context, proc *process.Process) (sample, error) {

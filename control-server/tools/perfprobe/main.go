@@ -236,11 +236,11 @@ func run(parent context.Context, args []string, output io.Writer) error {
 		return json.NewEncoder(output).Encode(map[string]int64{"durationMs": duration.Milliseconds(), "warmupMs": warmup.Milliseconds()})
 	}
 	if *pid == 0 {
-		snapshot, err := readRuntime(*base)
+		serverPID, err := discoverPID(*base)
 		if err != nil {
 			return err
 		}
-		*pid = snapshot.PID
+		*pid = int(serverPID)
 	}
 	if *pid <= 0 || int64(*pid) > 1<<31-1 {
 		return errors.New("invalid server PID")

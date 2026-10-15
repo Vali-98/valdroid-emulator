@@ -20,7 +20,7 @@ func TestCPUAccountingIncludesMultipleCoresAndWeightsElapsedTime(t *testing.T) {
 	}
 }
 
-func TestRuntimeDiscoveryUsesLocalServerAndRejectsRedirects(t *testing.T) {
+func TestPIDDiscoveryUsesLocalServerAndRejectsRedirects(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/resources" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
@@ -28,20 +28,20 @@ func TestRuntimeDiscoveryUsesLocalServerAndRejectsRedirects(t *testing.T) {
 		fmt.Fprint(w, `{"pid":123,"heapAllocBytes":456}`)
 	}))
 	defer server.Close()
-	stats, err := readRuntime(server.URL)
-	if err != nil || stats.PID != 123 || stats.HeapAlloc != 456 {
-		t.Fatalf("discovery failed: %+v, %v", stats, err)
+	pid, err := discoverPID(server.URL)
+	if err != nil || pid != 123 {
+		t.Fatalf("discovery failed: %d, %v", pid, err)
 	}
 	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, server.URL, http.StatusFound) }))
 	defer redirect.Close()
-	if _, err := readRuntime(redirect.URL); err == nil {
+	if _, err := discoverPID(redirect.URL); err == nil {
 		t.Fatal("followed a redirect instead of validating the process source")
 	}
 }
 
-func TestRuntimeDiscoveryRejectsRemoteOrInvalidURLs(t *testing.T) {
+func TestPIDDiscoveryRejectsRemoteOrInvalidURLs(t *testing.T) {
 	for _, address := range []string{"https://example.com", "file:///tmp/server", "http://[::", "http://0.0.0.0:8080"} {
-		if _, err := readRuntime(address); err == nil {
+		if _, err := discoverPID(address); err == nil {
 			t.Errorf("accepted non-local server: %s", address)
 		}
 	}

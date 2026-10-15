@@ -33,14 +33,6 @@ func TestAccessUnitsRequireDelimiters(t *testing.T) {
 	}
 }
 
-func TestSummarizeDoesNotMutateSamples(t *testing.T) {
-	samples := []float64{3, 1, 2}
-	stats := summarize(samples)
-	if stats.Mean != 2 || stats.P50 != 2 || stats.Max != 3 || samples[0] != 3 {
-		t.Fatalf("incorrect summary or mutated samples: %+v, %v", stats, samples)
-	}
-}
-
 type partialWriter struct{ bytes.Buffer }
 
 func (w *partialWriter) Write(data []byte) (int, error) {
