@@ -1,4 +1,4 @@
-module emu_stream_test
+module control_server
 
 go 1.20
 

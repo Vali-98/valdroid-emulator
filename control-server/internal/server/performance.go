@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"emu_stream_test/internal/codec"
+	"control_server/internal/codec"
 )
 
 type durationWindow struct {

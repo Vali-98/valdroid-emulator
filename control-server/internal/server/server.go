@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"emu_stream_test/internal/agent"
-	"emu_stream_test/internal/codec"
-	"emu_stream_test/internal/device"
+	"control_server/internal/agent"
+	"control_server/internal/codec"
+	"control_server/internal/device"
 )
 
 //go:embed web/index.html

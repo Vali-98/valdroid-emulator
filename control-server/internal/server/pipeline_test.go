@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"emu_stream_test/internal/codec"
+	"control_server/internal/codec"
 )
 
 func TestClientQueueRetainsNewestFrame(t *testing.T) {

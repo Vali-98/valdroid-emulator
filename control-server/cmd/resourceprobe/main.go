@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"emu_stream_test/internal/diagnostics"
+	"control_server/internal/diagnostics"
 	"github.com/shirou/gopsutil/v4/process"
 )
 

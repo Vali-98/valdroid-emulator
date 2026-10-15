@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"emu_stream_test/internal/codec"
+	"control_server/internal/codec"
 )
 
 type decodedFrame struct {

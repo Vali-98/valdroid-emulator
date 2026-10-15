@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"emu_stream_test/internal/diagnostics"
+	"control_server/internal/diagnostics"
 )
 
 func TestResourceSnapshotReportsCurrentProcessAndHeap(t *testing.T) {

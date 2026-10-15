@@ -1,5 +1,5 @@
 package main
 
-import "emu_stream_test/internal/server"
+import "control_server/internal/server"
 
 func main() { server.Run() }

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"emu_stream_test/internal/diagnostics"
+	"control_server/internal/diagnostics"
 )
 
 func resourcesHandler(w http.ResponseWriter, r *http.Request) {
