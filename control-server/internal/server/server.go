@@ -25,6 +25,8 @@ var indexFiles embed.FS
 func Run() {
 	httpAddress := flag.String("http", HTTP_ADDR, "HTTP listen address")
 	socketAddress := flag.String("socket", SOCKET_ADDR, "agent TCP listen address")
+	autoPort := flag.Bool("auto-port", false, "use an available port if a requested port is unavailable")
+	announce := flag.Bool("announce-listeners", false, "write the actual listener addresses as a JSON line to stdout")
 	distDir := flag.String("dist-dir", "dist", "directory containing the agent archive and native libraries")
 	deviceSerial := flag.String("device-serial", "", "Android device serial; installs and starts the agent after listeners are ready")
 	testWebServer := flag.Bool("test-webserver", false, "serve the standalone HTML test page at /")
@@ -37,13 +39,8 @@ func Run() {
 	}
 	log.Printf("JPEG encoder: %s (quality %d)", codec.JPEGEncoderName, jpegQuality)
 
-	socketListener, err := net.Listen("tcp", *socketAddress)
+	httpListener, socketListener, err := listenEndpoints(*httpAddress, *socketAddress, *autoPort)
 	if err != nil {
-		log.Fatal(err)
-	}
-	httpListener, err := net.Listen("tcp", *httpAddress)
-	if err != nil {
-		_ = socketListener.Close()
 		log.Fatal(err)
 	}
 
@@ -102,14 +99,19 @@ func Run() {
 		close(shutdownDone)
 	}()
 	log.Printf("HTTP stream: http://%s/stream", browserHost(httpListener.Addr().String()))
-	log.Printf("Agent socket: TCP %s", *socketAddress)
+	log.Printf("Agent socket: TCP %s", socketListener.Addr())
+	if *announce {
+		if err := announceListeners(os.Stdout, httpListener, socketListener); err != nil {
+			log.Fatalf("Announce listeners: %v", err)
+		}
+	}
 	if *deviceSerial != "" {
 		config := agent.Config{
 			ADBPath:       *adbPath,
 			Serial:        *deviceSerial,
 			DistDir:       *distDir,
 			SocketName:    "screen-sharing-agent",
-			SocketAddress: *socketAddress,
+			SocketAddress: socketListener.Addr().String(),
 			BitRate:       *bitRate,
 			ChannelsReady: agentChannelsReady,
 		}

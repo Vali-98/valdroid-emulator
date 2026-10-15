@@ -3,8 +3,8 @@ package server
 var jpegQuality = 95
 
 const (
-	SOCKET_ADDR      = ":5050"
-	HTTP_ADDR        = ":8080"
+	SOCKET_ADDR      = "127.0.0.1:38476"
+	HTTP_ADDR        = "127.0.0.1:38475"
 	BOUNDARY         = "frame"
 	videoHeaderSize  = 44
 	codecHeaderSize  = 20

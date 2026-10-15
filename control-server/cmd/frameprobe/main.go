@@ -53,11 +53,11 @@ func main() {
 	}
 }
 func run() error {
-	base := flag.String("url", "http://127.0.0.1:8080", "server base URL")
+	base := flag.String("url", "http://127.0.0.1:38475", "server base URL")
 	duration := flag.Duration("duration", 20*time.Second, "measurement window")
 	warmup := flag.Duration("warmup", 2*time.Second, "warmup before measurement")
 	replayFile := flag.String("replay", "", "optional Annex-B AVC fixture containing AUD NAL units")
-	agent := flag.String("agent", "127.0.0.1:5050", "agent TCP address for replay")
+	agent := flag.String("agent", "127.0.0.1:38476", "agent TCP address for replay")
 	width := flag.Int("width", 1080, "replay display width")
 	height := flag.Int("height", 2400, "replay display height")
 	fps := flag.Int("fps", 60, "replay cadence / target FPS")

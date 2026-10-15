@@ -33,6 +33,22 @@ Start the server with the selected Android device serial and this directory's `d
 
 The server binds its HTTP and agent TCP listeners first, installs only changed agent files, configures `adb reverse`, then launches the agent. `/api/status` reports channel readiness and startup failures. The VS Code extension performs AVD selection/startup and passes the selected device serial to the server.
 
+Listeners default to loopback-only `127.0.0.1:38475` (HTTP) and
+`127.0.0.1:38476` (agent). Add `--auto-port` to let the OS choose a free port
+when either requested port is occupied; explicit `--http`/`--socket` addresses
+otherwise fail on conflicts. Port `0` also requests an OS-assigned port directly.
+Logs show the actual addresses, and ADB reverse always uses the actual agent port.
+
+The plugin passes `--auto-port --announce-listeners`. The latter prints one
+JSON line on stdout after both listeners are bound, for example:
+
+```json
+{"type":"server-listening","httpUrl":"http://127.0.0.1:38475","socketAddress":"127.0.0.1:38476"}
+```
+
+The extension waits for that announcement before polling readiness or loading
+its webview. It never assumes the preferred port belongs to its own process.
+
 The standalone test page at `/` is disabled by default. Add `--test-webserver` when running the server manually to serve it. The VS Code extension does not use this flag. `/api/volume` reports the device's media volume. File transfers are handled by the VS Code extension host with `adb push` to `/sdcard/Download`; the server exposes no upload endpoint.
 
 AVC decode prerequisites by host are listed in [BUILDING.md](BUILDING.md).
@@ -66,4 +82,4 @@ Video queues retain only the newest pending frame. A slow encoder or viewer drop
 
 See [PERFORMANCE.md](PERFORMANCE.md) for measurements, automated input, reproducible 60fps replay/live tests, and the limits of these latency measurements.
 
-`make resourceprobe` builds an external CPU/RAM sampler. Run `./dist/resourceprobe --server http://127.0.0.1:8080 --duration 30s --label live-60fps` while the server streams. It reports per-core CPU percentages and native-inclusive RSS, plus Go heap/GC snapshots from `/api/resources`. Use `--pid` instead for servers without that endpoint. See [PERFORMANCE.md](PERFORMANCE.md#cpu-and-ram) for idle/load comparisons and interpretation.
+`make resourceprobe` builds an external CPU/RAM sampler. Run `./dist/resourceprobe --server http://127.0.0.1:38475 --duration 30s --label live-60fps` while the server streams (use its announced URL if the port changed). It reports per-core CPU percentages and native-inclusive RSS, plus Go heap/GC snapshots from `/api/resources`. Use `--pid` instead for servers without that endpoint. See [PERFORMANCE.md](PERFORMANCE.md#cpu-and-ram) for idle/load comparisons and interpretation.

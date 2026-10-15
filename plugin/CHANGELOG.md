@@ -6,4 +6,6 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Prefer loopback ports 38475/38476 and automatically resolve occupied ports
+  using the control server's actual listener addresses.
 - Initial release

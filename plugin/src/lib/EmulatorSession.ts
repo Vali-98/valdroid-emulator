@@ -8,6 +8,7 @@ import type { EmulatorViewProvider } from '../view/EmulatorViewProvider';
 import type { ServerStatus } from '../shared/protocol';
 import { AdbFileTransfer } from './AdbFileTransfer';
 import type { TransferFile } from './FileUploadReceiver';
+import { preferredAgentAddress, preferredHTTPAddress, waitForServerAddress } from './serverConnection';
 
 export class EmulatorSession {
 	private serverProcess?: ChildProcess;
@@ -80,10 +81,10 @@ export class EmulatorSession {
 		if (!fs.existsSync(serverPath)) {
 			throw new Error(`Missing bundled server for ${target} in ${serverPath}. Build the control-server and package the extension for this platform.`);
 		}
-		const baseUrl = 'http://127.0.0.1:8080';
 		this.serverProcess = spawn(serverPath, [
-			'--http', '127.0.0.1:8080',
-			'--socket', '127.0.0.1:5050',
+			'--http', preferredHTTPAddress,
+			'--socket', preferredAgentAddress,
+			'--auto-port', '--announce-listeners',
 			'--dist-dir', bundleDir,
 			'--device-serial', serial,
 			'--adb', this.adbPath,
@@ -93,6 +94,7 @@ export class EmulatorSession {
 		this.activeSerial = serial;
 		child.stdout?.on('data', data => this.output.append(data.toString()));
 		child.stderr?.on('data', data => this.output.append(data.toString()));
+		child.on('error', error => this.output.appendLine(`Control server process error: ${error.message}`));
 		child.on('exit', code => {
 			this.output.appendLine(`Control server exited (${code ?? 'signal'}).`);
 			if (this.serverProcess === child) {
@@ -104,10 +106,12 @@ export class EmulatorSession {
 			}
 		});
 		this.provider.setStatus('Starting control server and Android agent…', 'online');
+		let baseUrl: string;
 		try {
+			baseUrl = await waitForServerAddress(child);
 			await this.waitForAgent(baseUrl, child);
 		} catch (error) {
-			await this.stopServer();
+			if (this.serverProcess === child) {await this.stopServer();}
 			throw error;
 		}
 		if (this.serverProcess !== child) {return;}
@@ -120,16 +124,16 @@ export class EmulatorSession {
 	private async waitForAgent(baseUrl: string, processHandle: ChildProcess): Promise<void> {
 		const deadline = Date.now() + 120000;
 		while (Date.now() < deadline) {
-			if (processHandle.exitCode !== null) {throw new Error(`Control server exited with code ${processHandle.exitCode}.`);}
+			if (processHandle.exitCode !== null || processHandle.signalCode !== null) {throw new Error(`Control server exited (${processHandle.signalCode || processHandle.exitCode}).`);}
 			try {
-				const response = await fetch(`${baseUrl}/api/status`);
+				const response = await fetch(`${baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
 				if (response.ok) {
 					const status = await response.json() as ServerStatus;
 					if (status.agentError) {throw new Error(status.agentError);}
 					if (status.videoConnected && status.controlConnected) {return;}
 				}
 			} catch (error) {
-				if (error instanceof Error && error.message !== 'fetch failed') {throw error;}
+				if (error instanceof Error && error.message !== 'fetch failed' && error.name !== 'TimeoutError') {throw error;}
 			}
 			await delay(300);
 		}

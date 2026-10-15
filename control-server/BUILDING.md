@@ -37,10 +37,11 @@ The Linux backend links to the system FFmpeg libraries; it does not launch the `
 
 ## Android Device
 
-Run the server before launching the agent. Ensure ADB reverse maps the agent's abstract socket to TCP port 5050:
+Run the server before launching the agent. For manual agent startup, map its
+abstract socket to the server's actual agent TCP port (default `38476`):
 
 ```sh
-adb reverse localabstract:screen-sharing-agent tcp:5050
+adb reverse localabstract:screen-sharing-agent tcp:38476
 ```
 
 Install JDK 17 and Android SDK platform/build-tools 36, CMake 3.22.1, and the NDK
@@ -51,6 +52,8 @@ this agent launcher. `make plugin-bundle` builds and copies the host server,
 JAR, and Android ABI libraries into the plugin's VS Code platform directory.
 The server's startup path installs and launches the agent through ADB; separate
 launcher scripts are not required. The plugin has a WASM Opus decoder fallback.
+When `--device-serial` is provided, the server sets up ADB reverse itself,
+including any fallback port selected with `--auto-port`.
 
 See [packaging and publishing](../docs/RELEASING.md) before distributing binaries;
 Linux's system FFmpeg dependency is not automatically bundled by this Makefile.
