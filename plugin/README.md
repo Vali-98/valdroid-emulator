@@ -74,6 +74,13 @@ Local HTTP and agent listeners prefer ports `38475` and `38476`. If another
 process is using either port, Valdroid automatically selects an available port
 and connects to the addresses announced by its own server.
 
+## Development
+
+Run `npm test` for unit/integration tests and `npm run test:perf` for an isolated
+CPU/RAM/FPS replay benchmark. Dedicated-emulator and real-browser touch tests
+are documented in [Performance Testing](https://github.com/Vali-98/valdroid-emulator/blob/main/control-server/PERFORMANCE.md).
+Benchmark executables and Chromium are development-only, not extension runtime assets.
+
 ## Source and License
 
 [Source code](https://github.com/Vali-98/valdroid-emulator) and

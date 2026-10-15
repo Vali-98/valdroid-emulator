@@ -54,6 +54,7 @@ func Run() {
 		mux.Handle("/", http.FileServer(http.FS(assets)))
 	}
 	mux.HandleFunc("/stream", mjpegHandler)
+	mux.HandleFunc("/video", videoWebSocketHandler)
 	mux.HandleFunc("/control", controlWebSocketHandler)
 	mux.HandleFunc("/audio", audioWebSocketHandler)
 	mux.HandleFunc("/api/display-state", displayStateHandler)

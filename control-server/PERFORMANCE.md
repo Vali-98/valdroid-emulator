@@ -1,186 +1,174 @@
-# Frame Pacing and Latency
+# Performance and Input Latency
 
-The target is sustained 60fps with bounded queueing, not a backlog that reports high throughput while showing old frames. At 60fps there is 16.67ms between frames. Capture, agent AVC encoding, transport, server decode/JPEG conversion, and browser decode/render all contribute to the result.
+The target is sustained 60fps with bounded queueing, not high throughput showing
+old frames. At 60fps each frame period is 16.67ms. Capture, Android injection,
+AVC encoding, server decoding/JPEG conversion, and browser presentation all matter.
 
-## Encoder Baseline
+## One Command
 
-Measured on an Apple M4, darwin/arm64, at 1080x2400 and JPEG quality 95 using the deterministic UI-like image in `internal/codec/pipeline_benchmark_test.go`:
-
-| Encoder | Average encode time | Go bytes allocated per encode |
-| --- | ---: | ---: |
-| Original Go `image/jpeg` path | 16.54-16.82ms | 524,784 |
-| Default macOS ImageIO | 3.47ms | 229,376 |
-| Optional libjpeg-turbo | 2.71ms | 237,576 |
-
-These are encoder microbenchmarks, not end-to-end latency or identical visual-quality guarantees. JPEG encoders interpret quality differently. Go allocation counts exclude native allocations; complex/noisy images can cost more than this fixture.
-
-The macOS decoder uses synchronous VideoToolbox calls so native code can read a reusable Go packet without retaining its pointer after the call. This depends on keeping asynchronous/temporal-processing flags disabled, as specified in [Apple's decode API contract](https://developer.apple.com/documentation/videotoolbox/vtdecompressionsessiondecodeframe(_:samplebuffer:flags:framerefcon:infoflagsout:)). The optional encoder uses the existing [libjpeg-turbo API](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/main/src/turbojpeg.h), with worker-owned native output storage and an immutable Go copy for fanout.
+From `plugin/`:
 
 ```sh
+npm ci
+npm run test:perf
+npm run test:perf -- --duration 60s --warmup 8s --output report.json
+```
+
+The runner builds a native server and the separate `tools/perfprobe` executable,
+generates a deterministic 1080x2400/60fps AVC replay, starts an isolated server on
+temporary loopback ports, and samples **FPS, frame gaps, server CPU, and RAM over
+the same measurement window**. It stops its processes and deletes temporary files
+even on failure. Nothing installs on a device in default replay mode.
+
+Requires Go and the platform's native C/codec toolchain (see [BUILDING.md](BUILDING.md)).
+Replay generation also needs FFmpeg with libx264. Supply `--replay path.h264` to use
+an existing Annex-B fixture with access-unit delimiters, parameter sets, and an
+initial independently decodable keyframe. `--go-tags turbojpeg` enables the optional
+encoder when its development libraries are installed. `--server-binary path` tests
+an existing server instead of rebuilding it; use `--transport mjpeg` for old servers.
+
+Default assertions require at least 98% of target FPS, monotonically increasing
+PTS, and p95 receive gaps no greater than 1.5 frame periods (25ms at 60fps).
+Failures exit nonzero **after emitting the report**. `--no-assert` is useful for
+exploration; also inspect p99/max, not just averages. `--json` prints the complete
+report; `npm run --silent test:perf -- --json` avoids npm's own stdout headers.
+
+## Live Input and Browser Tests
+
+Use a **dedicated emulator**. These tests install a temporary animation/touch
+fixture, bring it to the foreground, and send real touch input:
+
+```sh
+npm run test:perf -- --device emulator-5554 --duration 30s
+npx playwright install chromium
+npm run test:perf -- --device emulator-5554 --browser --duration 30s \
+  --screenshot /tmp/valdroid-webview.png --output browser-report.json
+```
+
+Live mode needs ADB, the Android SDK/JDK, bash, and built agent assets in
+`plugin/bundle/<platform>-<arch>/`. The fixture builds without Gradle or downloaded
+dependencies; it defaults to Android platform/build-tools 36. Override
+`ANDROID_PLATFORM` / `ANDROID_BUILD_TOOLS` as necessary. `--adb path` selects ADB.
+
+Stop an existing Valdroid stream on that device first. The runner refuses to
+overwrite an existing fixture or agent reverse mapping. Afterward it uninstalls
+its fixture, removes its reverse mapping, and restores the prior foreground
+activity (or Home). It does not stop the emulator or modify global Android settings.
+
+The fixture animates every vsync. Each injected DOWN increments a 16-bit colored
+marker. Detecting that counter in JPEG pixels avoids assuming device and host
+clocks are synchronized. A static home screen intentionally emits fewer frames
+and is not a continuous-60fps workload.
+
+Without `--browser`, taps originate in the Go probe. The report separates host
+send to received visual response, input ACK round trip, and server forwarding.
+An ACK ends at the **agent socket write**, not Android injection or presentation.
+JPEG inspection uses a bounded newest-frame worker; it can miss an earlier
+response frame under load, so this is observed-response latency.
+
+With `--browser`, Playwright loads the actual production React webview, sends
+mouse gestures through its real input handlers, and detects the response pixels
+on an animation-frame callback. This includes browser decode/presentation but
+**not physical display scanout or VS Code workbench overhead**. Chromium is an
+optional developer tool, not a dependency shipped in the extension. The Go probe
+still measures server resources and received frames independently.
+
+## Touch Investigation (2026-10-15)
+
+Apple M4, 10 logical CPUs, Android 36 ARM64 emulator, ImageIO JPEG95:
+
+| Measurement | Mean | p95 |
+| --- | ---: | ---: |
+| Input ACK round trip, Go-originated taps | 0.186ms | 0.379ms |
+| Server encode/write of input command | 0.008ms | 0.015ms |
+| Tap to completed JPEG receipt | 57.31ms | 59.79ms |
+| Previous MJPEG/image presentation, browser | 95.42ms | 97.20ms |
+| WebSocket/predecoded-image experiment, browser | 109.05ms | 95.80ms |
+| WebSocket/direct canvas presentation, browser | 77.67ms | 80.90ms |
+
+The WebSocket/image experiment had a 441ms outlier and offered no convincing
+typical-latency improvement. Direct `createImageBitmap`/canvas presentation
+removed roughly one frame period versus the previous MJPEG/image path. This is
+a short-run host comparison, not a universal input-to-photon guarantee. The
+baseline browser run used the previous committed server with the same input
+handlers; the final run uses the new server and canvas renderer. No builds or
+other benchmarks ran during measurement windows.
+
+The final 15-second browser test delivered **900 frames / 60.00fps**, with receive
+gaps 21.32ms p95 / 23.44ms p99 / 35.96ms max, and 31 observed tap responses.
+Server CPU averaged **22.05% of one core**; RSS averaged **122.12 MiB**, with a
+sampled peak of **123.73 MiB**. There were two video subscribers (Go and browser).
+The prior 15-second MJPEG test delivered 59.80fps, 23.21% CPU, 118.29 MiB mean
+RSS and 123.03 MiB peak. Short warmup/allocator growth prevents a leak conclusion.
+
+The forwarding path was already fast; TCP_NODELAY is already Go's default.
+Production changes instead bound stale MOVE traffic, keep DOWN/UP/CANCEL/key
+edges immediate, use native raw pointer updates when delivered by the browser,
+and render the newest decoded frame directly. Display metadata travels with
+each JPEG so rotation/input mapping does not wait for a polling interval.
+Remaining latency still includes Android dispatch, capture/encoding, and frame
+scheduling; the measured 78ms is not zero latency.
+
+A subsequent 20-second browser run (5s warmup, 41 taps) had 77.30ms median,
+83.36ms mean, **107.50ms p95**, and 176.10ms maximum response latency. It delivered
+59.70fps with 23.13ms p95 / 29.02ms p99 receive gaps and a 109.57ms maximum gap;
+source PTS also had a 64.27ms gap. It passed the configured consistency threshold,
+but tail hitches clearly remain. CPU averaged 25.77% of one core; mean/peak RSS
+was 110.55/116.31 MiB. Browser pixel/geometry checks passed at 1000x900 and 360x640,
+with a visible, height-constrained screen and no control overlap. Typical latency
+improved in these runs; tail latency is workload-sensitive, not universally fixed.
+
+## Reading CPU, RAM, and FPS
+
+- CPU uses **100% = one occupied CPU core**, and may exceed 100%. Mean uses total
+  user/system CPU time divided by actual elapsed sampling time; p95/max use
+  interval samples (250ms default).
+- RAM is resident process memory, including native codec allocations. Mean,
+  p95, and peak are sampled MiB, not lifetime OS high-water marks. Start/end and
+  RSS growth are included. A process exit or PID reuse fails the sample.
+- Resources exclude the Android emulator/agent, browser, probe, and separate OS
+  services. gopsutil and replay/input generation are only in the standalone tool,
+  not linked into the server. `/api/resources` remains a lightweight diagnostic
+  snapshot/PID discovery endpoint, not a background benchmark.
+- FPS counts complete JPEGs over the entire fixed window, including silence;
+  it is not a browser paint count. Receive gaps use the host clock; source PTS
+  gaps help distinguish capture irregularity from server processing.
+- `serverProcessing` runs from framed AVC packet arrival to video-header
+  creation. `replayToReceive` runs from host AVC send to complete JPEG receipt.
+  Neither includes Android capture or browser presentation. Cached startup
+  frames do not contribute processing samples.
+- `/api/performance` retains 600 recent timing samples and cumulative counters.
+  Restart between independent comparisons. Multiple viewers increase delivered
+  counts, not unique source FPS. Slow viewers can still drop frames.
+- Repeat long steady-state windows, rotations, and reconnects before diagnosing
+  a leak. macOS results do not substitute for native Linux/Windows testing.
+
+For comparison, a previous 60-second high-detail replay (8s warmup, one MJPEG
+subscriber) delivered 60fps at 37.06% CPU, 125.40 MiB mean / 125.52 MiB peak RSS,
+and 0.47 MiB RSS growth. The current 5-second WebSocket replay delivered 60fps,
+17.57ms p95 gaps, 7.84ms mean send-to-receive, 35.89% CPU and 123.45 MiB peak RSS.
+These unequal short/long windows are reference points, not an optimization claim.
+
+Final combined replay recheck: 30 seconds after 5 seconds warmup, **60.00fps**,
+17.69ms p95 / 18.58ms p99 receive gaps, 7.58ms mean / 8.24ms p95 host
+send-to-receive, **33.55% CPU**, and **122.34 MiB mean / 123.78 MiB peak RSS**.
+The default frame-consistency assertions passed.
+
+## Lower-Level Checks
+
+```sh
+# From control-server/, for an already-running isolated server:
+make perfprobe
+./dist/perfprobe --url http://127.0.0.1:38475 --pid SERVER_PID \
+  --duration 30s --transport websocket --assert-target
+make test
 make benchmark
 make benchmark GO_TAGS=turbojpeg
 ```
 
-## Reproducible Server Replay
-
-This isolates the server from Android capture/encoder variability. Requires FFmpeg with libx264 to generate a fixture; the running server does not invoke FFmpeg. Use a separate server with no real agent connected.
-
-```sh
-make server frameprobe
-ffmpeg -hide_banner -loglevel error -f lavfi \
-  -i 'testsrc2=size=1080x2400:rate=60' -t 3 \
-  -c:v libx264 -preset ultrafast -tune zerolatency -g 60 -bf 0 \
-  -b:v 10M -pix_fmt yuv420p -bsf:v h264_metadata=aud=insert \
-  -f h264 -y /tmp/valdroid-perf.h264
-./dist/control-server-$(go env GOOS)-$(go env GOARCH) \
-  --http 127.0.0.1:18080 --socket 127.0.0.1:15050
-```
-
-In another terminal:
-
-```sh
-./dist/frameprobe --url http://127.0.0.1:18080 \
-  --agent 127.0.0.1:15050 --replay /tmp/valdroid-perf.h264 \
-  --width 1080 --height 2400 --duration 30s --assert-target
-```
-
-The fixture must contain access-unit delimiters and start with an independently decodable keyframe plus parameter sets. The generated fixture loops with a fresh IDR at its beginning. `--fps` controls replay cadence and the assertion target. Do not replay into a server already receiving a real agent's display 0.
-
-The first measured 12-second replay on this host delivered 60.00fps, 17.58ms p95 and 18.07ms p99 receive gaps, 7.19ms mean and 8.34ms p95 server processing, and no decode/encode errors. One frame was replaced during initial startup before the measured window; no client frames were dropped. The original committed server delivered 52.58fps on the identical fixture, with 20.34ms p95 gaps and 33.33ms source-PTS jumps when frames were skipped. It failed the same target assertion.
-
-## Real Android Agent and Input
-
-Use a dedicated emulator/device. `--exercise-input` repeatedly sends vertical swipes through the same control WebSocket as the extension; it changes the foreground app's state. A static home screen intentionally produces few frames and is not a valid continuous-60fps fixture.
-
-`tools/frame-clock` supplies a dependency-free Android test app that redraws moving bars and a frame counter every vsync, and displays a marker at injected touch coordinates. The build uses your installed JDK and Android SDK, generates a temporary signing key, and does not require Gradle or downloaded dependencies. Defaults are Android platform 36 / build-tools 36.0.0; override `ANDROID_PLATFORM` and `ANDROID_BUILD_TOOLS` as needed.
-
-```sh
-bash tools/frame-clock/build.sh /tmp/valdroid-frame-clock.apk
-adb -s emulator-5554 install -r /tmp/valdroid-frame-clock.apk
-adb -s emulator-5554 shell am start -n dev.valdroid.frameclock/.FrameClock
-./dist/control-server-$(go env GOOS)-$(go env GOARCH) \
-  --device-serial emulator-5554 --dist-dir "$PWD/dist"
-```
-
-In another terminal:
-
-```sh
-./dist/frameprobe --duration 60s --warmup 3s --exercise-input --assert-target
-adb -s emulator-5554 uninstall dev.valdroid.frameclock
-```
-
-On the same Apple M4 / Android 36 ARM64 emulator, the 1080x2400 live test with automated swipes delivered **3,600 frames in 60 seconds**. Receive gaps were 17.92ms p95 / 18.73ms p99 / 28.14ms maximum; server processing was 4.76ms mean / 5.29ms p95 / 5.53ms p99. There were no encode/client drops or decode/encode errors. The original server also managed 59.97fps on this relatively simple live animation, with 18.59ms p95 / 20.04ms p99 receive gaps; the improvement should not be described as turning every previously slow workload into 60fps. The native encoder provides substantially more processing headroom.
-
-## Reading Results
-
-- FPS counts complete received JPEGs over the fixed measurement window, including periods of silence. It does not count browser paints.
-- `receiveIntervals` measures complete JPEG delivery gaps on the probe's host clock. Source PTS gaps identify capture/agent irregularity independently of server processing.
-- `serverProcessing` measures complete-packet arrival (after AVC framing) to HTTP header emission. The endpoint's `serverResidence` extends this through HTTP flush. Neither includes device capture/encode, packet ingress, browser decoding/painting, or input-to-photon latency. Device and host clocks are not assumed synchronized.
-- `--assert-target` exits nonzero below 98% of target FPS, for nonmonotonic presentation timestamps, or if the p95 receive gap exceeds 1.5 frame periods (25ms at 60fps). Review p99/max too; a passing average is not a guarantee of zero hitches.
-- `/api/performance` retains the latest 600 timing samples, with cumulative counters since server start. Restart the server between independent comparisons. A cached frame on initial subscription is excluded from processing latency.
-- Replay pacing depends on the load generator's scheduling. Compare arrival/source intervals before attributing a gap to decoding. Repeat tests without benchmarks/builds running concurrently.
-- MJPEG has significant bandwidth and browser decode overhead. A slow webview, remote host, overloaded emulator, or slower platform codec can still miss 60fps even when the server replay passes. Linux and Windows native execution must be measured on those hosts.
-
-## CPU and RAM
-
-`resourceprobe` samples the server **from a separate process** using gopsutil. No
-sampling timer runs in the server's frame path. RSS includes resident Go and
-native decoder/JPEG allocations; Go heap statistics alone would miss native
-memory. `/api/resources` reports PID, live/reserved Go heap, total allocations,
-GC cycles/pause time, goroutines, and cgo calls. The probe reads it just before
-and after the measurement window, not on every frame.
-
-```sh
-make server frameprobe resourceprobe
-./dist/resourceprobe --server http://127.0.0.1:18080 \
-  --duration 30s --warmup 5s --label idle
-```
-
-Start a separate server and the replay described above. While replay is running,
-sample the same process in another terminal:
-
-```sh
-./dist/frameprobe --url http://127.0.0.1:18080 \
-  --agent 127.0.0.1:15050 --replay /tmp/valdroid-perf.h264 \
-  --duration 70s --warmup 3s --assert-target
-```
-
-```sh
-./dist/resourceprobe --server http://127.0.0.1:18080 \
-  --duration 60s --warmup 5s --label replay-60fps
-```
-
-For a real agent, use the frame-clock app and replace the replay command with
-`frameprobe --exercise-input --duration 70s --assert-target`. To monitor an older
-server, use `resourceprobe --pid <server-pid> --duration 30s`; Go snapshots require
-the new endpoint. `--server` only accepts loopback URLs to avoid accidentally
-sampling an unrelated local PID reported by a remote server. A process exit or
-PID reuse fails the measurement rather than silently combining processes.
-
-CPU percentages use **100% = one fully occupied CPU core**, and can exceed 100%
-for multithreaded workloads. Mean CPU is computed from total user+system CPU time
-over actual elapsed time; p95/max are interval samples. RSS mean/p95/max are
-sampled values in MiB, not the operating system's lifetime peak. The default
-interval is 250ms. Start/end RSS and growth are included. Sampling is approximate,
-and OS permissions may restrict inspecting other users' processes.
-
-Measured on the same Apple M4 (10 logical CPUs), ImageIO JPEG95, 1080x2400 replay,
-one MJPEG subscriber:
-
-| Scenario | Mean CPU (one core = 100%) | Mean RSS | Sampled peak RSS |
-| --- | ---: | ---: | ---: |
-| Fresh idle server, 10 seconds | below sampling resolution | 12.23 MiB | 12.23 MiB |
-| Continuous 60fps, first 30-second sample | 36.91% | 122.86 MiB | 122.94 MiB |
-| Continuous 60fps, second 30-second sample | 35.62% | 123.80 MiB | 124.94 MiB |
-
-Both replays delivered exactly 60fps. RSS increased 0.11 MiB and 1.61 MiB across
-the respective sample windows. In the aligned second sample, live Go heap was
-27.29 MiB at both ends, with 37 collections and 1.73ms **total** GC pause time over
-30 seconds. These measurements do not indicate an urgent CPU/RAM bottleneck on
-this host. They are not proof of leak freedom: repeat for several minutes, after
-rotation/reconnection and with multiple subscribers. Some retained pool/native
-allocator memory is expected after streaming stops. Sustained growth across
-comparable steady-state windows is more actionable than a single high-water mark.
-
-The figures exclude the Android emulator/agent, browser/webview, load generator,
-and CPU/GPU work performed in separate OS services. Native execution on Windows
-and Linux still needs measurement. Compare resource reports alongside frame
-pacing, since lower CPU achieved by dropping frames is not an optimization win.
-
-## Package Refactor Recheck (2026-10-15)
-
-Fresh measurements after separating agent, codec, device, diagnostics, and server
-packages. Same Apple M4 / 10 logical CPUs, ImageIO JPEG95, 1080x2400 high-detail
-replay, one MJPEG subscriber; resource sampling interval 250ms:
-
-| Scenario | Duration | Mean CPU | CPU p95 | Mean RSS | Peak sampled RSS | RSS growth |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Fresh idle | 10s | 0.013% | 0% | 12.78 MiB | 13.06 MiB | 0.77 MiB |
-| Sustained 60fps | 60s | 37.06% | 39.51% | 125.40 MiB | 125.52 MiB | 0.47 MiB |
-
-CPU remains per-core: 37.06% means about 0.37 of one core, not 37% of the entire
-10-core machine. Idle includes a one-time request verifying the relocated test
-page. The loaded window starts after eight seconds of warmup. There were 72 Go
-collections with 3.50ms total GC pause time during the loaded minute. Live Go heap
-was 33.38 MiB at the start and 58.26 MiB at the end; these are different points in
-the collection cycle, while reserved Go heap and process RSS stayed essentially
-flat. A single before/after heap value is not a leak diagnosis.
-
-The accompanying 80-second frame probe delivered all 4,800 frames at 60fps with
-17.53ms p95 / 17.85ms p99 receive gaps. The maximum gap was 43.76ms, so occasional
-hitches remain despite healthy average throughput. Server processing averaged
-7.88ms (8.63ms p95). There were no client drops or decode/encode errors; one
-pending frame was replaced during startup, outside the measurement window.
-
-This run does not show an immediate CPU/RAM bottleneck or a resource regression
-from the package changes. Longer soak tests and native Linux/Windows measurements
-are still needed before claiming leak freedom or universal 60fps behavior.
-
-## Regression Checks
-
-```sh
-make test
-go test -count 10 -run 'TestJPEG|TestDecodedQueue|TestClientQueue|TestPerformance' ./internal/...
-```
-
-Tests cover AVC framing, JPEG color/dimension preservation, published-buffer ownership, newest-frame replacement/drop accounting, cached-frame startup, timing windows, audio framing, control serialization, and HTTP/WebSocket paths. The live/replay probe complements unit tests by exercising real native decoding and sustained pacing.
+Native encoder microbenchmarks at 1080x2400/JPEG95 on this host: original Go JPEG
+16.54-16.82ms, ImageIO 3.47ms, optional libjpeg-turbo 2.71ms. Encoder quality scales
+are not identical, and Go allocation metrics exclude native memory. These are
+encoder microbenchmarks, not end-to-end latency. Tests cover serialization,
+gesture boundaries, queue replacement, frame envelopes, timeouts, resource
+accounting, marker detection, browser cleanup, and display coordinate mapping.

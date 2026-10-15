@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ type inputCommand struct {
 	IsMouse      bool            `json:"isMouse"`
 	KeyCode      int32           `json:"keyCode"`
 	MetaState    uint32          `json:"metaState"`
+	RequestID    string          `json:"requestId,omitempty"`
 }
 
 var (
@@ -135,17 +137,41 @@ func controlWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 	conn.SetReadLimit(64 * 1024)
+	queue := newInputQueue()
+	stopShutdown := context.AfterFunc(r.Context(), func() { queue.close(); _ = conn.Close() })
+	defer stopShutdown()
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		defer queue.close()
+		for {
+			var command inputCommand
+			if err := conn.ReadJSON(&command); err != nil || !queue.push(command) {
+				return
+			}
+		}
+	}()
+	defer func() { queue.close(); _ = conn.Close(); <-readerDone }()
 	for {
-		var command inputCommand
-		if err := conn.ReadJSON(&command); err != nil {
+		command, open := queue.pop()
+		if !open {
 			return
 		}
+		started := time.Now()
 		message, err := encodeInputCommand(command)
 		if err == nil {
 			err = sendAgentControl(message)
 		}
 		if err != nil {
-			_ = conn.WriteJSON(map[string]string{"error": err.Error()})
+			_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
+			if conn.WriteJSON(map[string]string{"error": err.Error(), "requestId": command.RequestID}) != nil {
+				return
+			}
+		} else if command.RequestID != "" {
+			_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
+			if conn.WriteJSON(map[string]any{"type": "input-ack", "requestId": command.RequestID, "serverForwardUs": time.Since(started).Microseconds()}) != nil {
+				return
+			}
 		}
 	}
 }

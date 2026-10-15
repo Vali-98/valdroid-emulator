@@ -1,16 +1,26 @@
 import * as React from 'react';
 import type { DisplayState } from '../shared/protocol';
 
-export function visibleImageRect(image: HTMLImageElement): { left: number; top: number; width: number; height: number } {
+export type ScreenElement = HTMLImageElement | HTMLCanvasElement;
+const dimensions = (image: ScreenElement) => image instanceof HTMLCanvasElement ? { width: image.width, height: image.height } : { width: image.naturalWidth, height: image.naturalHeight };
+const presentedDisplays = new WeakMap<ScreenElement, DisplayState>();
+export function setPresentedDisplay(image: ScreenElement, display?: DisplayState) {
+	if (display) {presentedDisplays.set(image, display);} else {presentedDisplays.delete(image);}
+}
+
+export function visibleImageRect(image: ScreenElement): { left: number; top: number; width: number; height: number } {
 	const rect = image.getBoundingClientRect();
-	const scale = Math.min(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
-	const width = image.naturalWidth * scale;
-	const height = image.naturalHeight * scale;
+	const size = dimensions(image);
+	const scale = Math.min(rect.width / size.width, rect.height / size.height);
+	const width = size.width * scale;
+	const height = size.height * scale;
 	return { left: rect.left + (rect.width - width) / 2, top: rect.top + (rect.height - height) / 2, width, height };
 }
 
-export function mapScreenPoint(image: HTMLImageElement, display: DisplayState, clientX: number, clientY: number, clamp = true) {
-	if (!image.naturalWidth || !image.naturalHeight || !display.width || !display.height) {return null;}
+export function mapScreenPoint(image: ScreenElement, display: DisplayState, clientX: number, clientY: number, clamp = true) {
+	display = presentedDisplays.get(image) ?? display;
+	const size = dimensions(image);
+	if (!size.width || !size.height || !display.width || !display.height) {return null;}
 	const { left, top, width, height } = visibleImageRect(image);
 	if (width <= 0 || height <= 0) {return null;}
 	if (!clamp && (clientX < left || clientX >= left + width || clientY < top || clientY >= top + height)) {return null;}

@@ -74,4 +74,7 @@ go test -race ./...
 go vet ./...
 ```
 
-Run `make benchmark` for encoder benchmarks and `make frameprobe` for the stream consistency probe. See [PERFORMANCE.md](PERFORMANCE.md) for live and replay scenarios.
+Run `make benchmark` for encoder microbenchmarks. From `plugin/`, `npm run test:perf`
+builds and runs the separate combined CPU/RAM/FPS benchmark automatically;
+`make perfprobe` builds just that utility. See [PERFORMANCE.md](PERFORMANCE.md)
+for replay, dedicated-device, and browser latency scenarios.

@@ -122,6 +122,7 @@
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
     "vsix": "node scripts/package-vsix.cjs",
     "test:packaging": "node --test scripts/*.test.cjs",
+    "test:perf": "node scripts/test-perf.cjs",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "npm run check-types && tsc --noEmit -p tests/tsconfig.json && vitest run",
@@ -139,6 +140,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^29.1.1",
     "npm-run-all": "^4.1.5",
+    "playwright": "1.64.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.1",
     "vitest": "^5.0.4"

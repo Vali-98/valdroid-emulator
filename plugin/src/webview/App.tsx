@@ -48,7 +48,7 @@ export function App() {
 	}
 	return <div className="app">
 		<Header title="No Emulator Loaded" loaded={false} />
-		<main className="stage">
+		<main className="stage stage-idle">
 			{host.session.state === 'online' ? <LoadingState status={host.session.status} /> : <DevicePicker
 				targets={host.targets} selected={host.selectedTarget} onSelect={host.selectTarget} onRefresh={host.refreshTargets}
 				onStart={() => {audio.resume(); host.start();}} error={host.session.state === 'error' ? host.session.status : undefined}

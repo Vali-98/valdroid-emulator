@@ -127,19 +127,8 @@ func mjpegHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming is not supported", http.StatusInternalServerError)
 		return
 	}
-	client := &streamClient{displayID: displayID, frames: make(chan streamFrame, 1)}
-	clientsMu.Lock()
-	clients[client] = struct{}{}
-	if frame, exists := latestFrames[displayID]; exists {
-		frame.cached = true
-		client.frames <- frame
-	}
-	clientsMu.Unlock()
-	defer func() {
-		clientsMu.Lock()
-		delete(clients, client)
-		clientsMu.Unlock()
-	}()
+	client, unsubscribe := subscribeFrames(displayID)
+	defer unsubscribe()
 
 	log.Printf("MJPEG client connected for display %d", displayID)
 	controller := http.NewResponseController(w)

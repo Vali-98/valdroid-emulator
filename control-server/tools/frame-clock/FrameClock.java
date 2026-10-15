@@ -21,6 +21,7 @@ public final class FrameClock extends Activity {
     private final class ClockView extends View implements Choreographer.FrameCallback {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private long frame;
+        private int touchSequence;
         private float touchX = -100, touchY = -100;
 
         ClockView() { super(FrameClock.this); }
@@ -48,13 +49,21 @@ public final class FrameClock extends Activity {
                 canvas.drawRect(x, y, x + 80, y + height / 24f, paint);
             }
             paint.setColor(Color.BLACK);
-            canvas.drawRect(0, 0, width, 140, paint);
+            canvas.drawRect(0, 0, width, height * .14f, paint);
             paint.setColor(Color.WHITE);
             paint.setTextSize(54);
             canvas.drawText("Frame " + frame, 30, 90, paint);
+            for (int cell = 0; cell < 20; cell++) {
+                boolean bit = cell < 4 ? cell % 2 == 0 : (touchSequence & (1 << (cell - 4))) != 0;
+                paint.setColor(bit ? Color.GREEN : Color.BLUE);
+                float left = width * (.1f + .8f * cell / 20);
+                canvas.drawRect(left, height * .06f, left + width * .8f / 20 + 1, height * .10f, paint);
+            }
+            paint.setColor(Color.WHITE);
             canvas.drawCircle(touchX, touchY, 70, paint);
         }
         @Override public boolean onTouchEvent(MotionEvent event) {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) touchSequence = (touchSequence + 1) & 65535;
             touchX = event.getX(); touchY = event.getY();
             return true;
         }

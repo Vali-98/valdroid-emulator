@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type * as React from 'react';
-import { androidKeyCode, mapScreenPoint, metaState, visibleImageRect } from '../../src/webview/input';
+import { androidKeyCode, mapScreenPoint, metaState, setPresentedDisplay, visibleImageRect } from '../../src/webview/input';
 
 function image() {
 	const element = document.createElement('img');
@@ -11,6 +11,13 @@ function image() {
 const display = { id: 0, width: 1080, height: 2400, orientation: 0 };
 
 describe('screen mapping', () => {
+	it('uses the presented frame dimensions until new polling catches up', () => {
+		const element = image();
+		setPresentedDisplay(element, { ...display, width: 200, height: 400 });
+		expect(mapScreenPoint(element, display, 160, 220)).toEqual({ x:100, y:200 });
+		setPresentedDisplay(element);
+		expect(mapScreenPoint(element, display, 160, 220)).toEqual({ x:540, y:1200 });
+	});
 	it('accounts for horizontal letterboxing', () => {
 		expect(visibleImageRect(image())).toEqual({ left: 60, top: 20, width: 200, height: 400 });
 	});

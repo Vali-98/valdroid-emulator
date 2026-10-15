@@ -1,28 +1,27 @@
 import * as React from 'react';
 import { socketUrl } from '../api';
+import { createControlSender } from '../controlSender';
 
 export function useControlConnection(serverUrl: string, refreshVolume: () => unknown) {
-	const socketRef = React.useRef<WebSocket | undefined>(undefined);
+	const senderRef = React.useRef<ReturnType<typeof createControlSender> | undefined>(undefined);
 	const volumeTimerRef = React.useRef<number | undefined>(undefined);
 	const [status, setStatus] = React.useState('Connecting to emulator');
 	React.useEffect(() => {
 		const socket = new WebSocket(socketUrl(serverUrl, '/control'));
-		socketRef.current = socket;
+		const sender = createControlSender(socket);
+		senderRef.current = sender;
 		socket.onopen = () => setStatus('Emulator connected');
 		socket.onclose = () => setStatus('Input connection closed');
 		socket.onerror = () => setStatus('Input connection failed');
 		return () => {
 			window.clearTimeout(volumeTimerRef.current);
+			sender.dispose(); senderRef.current = undefined;
 			socket.onopen = socket.onclose = socket.onerror = null;
 			socket.close();
-			socketRef.current = undefined;
 		};
 	}, [serverUrl]);
 	const send = React.useCallback((command: object): boolean => {
-		const socket = socketRef.current;
-		if (socket?.readyState !== WebSocket.OPEN) {return false;}
-		socket.send(JSON.stringify(command));
-		return true;
+		return senderRef.current?.send(command) ?? false;
 	}, []);
 	const sendDeviceKey = (keyCode: number) => {
 		if (send({ type: 'key', action: 8, keyCode, metaState: 0 }) && [24, 25, 164].includes(keyCode)) {

@@ -3,44 +3,58 @@ import type { DisplayState } from '../../shared/protocol';
 import { androidKeyCode, mapScreenPoint, metaState } from '../input';
 
 export function useEmulatorInput(display: DisplayState, send: (command: object) => boolean) {
-	const imageRef = React.useRef<HTMLImageElement>(null);
+	const imageRef = React.useRef<HTMLCanvasElement>(null);
 	const pointerIdRef = React.useRef<number | null>(null);
-	const sendMotion = (event: React.PointerEvent | React.WheelEvent, action: number, axes: Array<{ axis: number; value: number }> = []) => {
+	const rawInputRef = React.useRef(false);
+	const sendMotion = (event: { clientX: number; clientY: number }, action: number, axes: Array<{ axis: number; value: number }> = [], mapped?: { x: number; y: number }) => {
 		const image = imageRef.current;
-		const point = image && mapScreenPoint(image, display, event.clientX, event.clientY);
-		if (!point) {return;}
-		send({ type: 'motion', pointers: [{ ...point, id: 0, axes }], action,
+		const point = mapped ?? (image && mapScreenPoint(image, display, event.clientX, event.clientY));
+		if (!point) {return false;}
+		return send({ type: 'motion', pointers: [{ ...point, id: 0, axes }], action,
 			buttonState: 0, actionButton: 0, displayId: display.id, isMouse: false });
 	};
-	const release = (event: React.PointerEvent<HTMLImageElement>) => {
+	const release = (event: { pointerId: number; clientX: number; clientY: number }, action = 1) => {
 		if (event.pointerId !== pointerIdRef.current) {return;}
-		sendMotion(event, 1);
+		sendMotion(event, action);
 		pointerIdRef.current = null;
-		if (event.currentTarget.hasPointerCapture(event.pointerId)) {event.currentTarget.releasePointerCapture(event.pointerId);}
+		const image = imageRef.current;
+		if (image?.hasPointerCapture(event.pointerId)) {image.releasePointerCapture(event.pointerId);}
 	};
+	const move = (event: { pointerId: number; clientX: number; clientY: number; pointerType: string; buttons: number }) => {
+		if (event.pointerId !== pointerIdRef.current) {return;}
+		if (event.pointerType === 'mouse' && event.buttons === 0) {release(event); return;}
+		sendMotion(event, 2);
+	};
+	const rawMove = React.useEffectEvent((event: PointerEvent) => move(event));
+	React.useEffect(() => {
+		const image = imageRef.current;
+		if (!image || !('onpointerrawupdate' in image)) {return;}
+		const receive = (event: Event) => {rawInputRef.current = true; rawMove(event as PointerEvent);};
+		image.addEventListener('pointerrawupdate', receive, { passive: true });
+		return () => {rawInputRef.current = false; image.removeEventListener('pointerrawupdate', receive);};
+	}, []);
 	const sendKey = (event: React.KeyboardEvent, action: number) => {
 		const keyCode = androidKeyCode(event.key);
 		if (keyCode && send({ type: 'key', action, keyCode, metaState: metaState(event) })) {event.preventDefault();}
 	};
-	const screenProps: React.ImgHTMLAttributes<HTMLImageElement> = {
+	const screenProps: React.CanvasHTMLAttributes<HTMLCanvasElement> = {
 		onPointerDown: event => {
 			const image = imageRef.current;
-			if (!image || pointerIdRef.current !== null || (event.pointerType === 'mouse' && event.button !== 0)
-				|| !mapScreenPoint(image, display, event.clientX, event.clientY, false)) {return;}
+			if (!image || pointerIdRef.current !== null || (event.pointerType === 'mouse' && event.button !== 0)) {return;}
+			const point = mapScreenPoint(image, display, event.clientX, event.clientY, false);
+			if (!point) {return;}
 			event.preventDefault();
+			if (!sendMotion(event, 0, [], point)) {return;}
+			pointerIdRef.current = event.pointerId;
 			event.currentTarget.focus({ preventScroll: true });
 			event.currentTarget.setPointerCapture(event.pointerId);
-			pointerIdRef.current = event.pointerId;
-			sendMotion(event, 0);
 		},
 		onPointerMove: event => {
-			if (event.pointerId !== pointerIdRef.current) {return;}
-			if (event.pointerType === 'mouse' && event.buttons === 0) {release(event); return;}
-			sendMotion(event, 2);
+			if (!rawInputRef.current) {move(event);}
 		},
-		onPointerUp: release,
-		onPointerCancel: release,
-		onLostPointerCapture: release,
+		onPointerUp: event => release(event),
+		onPointerCancel: event => release(event, 3),
+		onLostPointerCapture: event => release(event, 3),
 		onWheel: event => {
 			event.preventDefault();
 			sendMotion(event, 8, [{ axis: 9, value: -event.deltaY }, { axis: 10, value: event.deltaX }]);

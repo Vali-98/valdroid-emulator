@@ -64,10 +64,9 @@ internal/
   diagnostics/                  Go heap/GC snapshots
   server/                       Listeners, channels, streaming, control, and telemetry
     web/                        Embedded standalone test client
-cmd/
-  frameprobe/                   Frame-pacing replay and automated input
-  resourceprobe/                External CPU/RSS sampler
-tools/frame-clock/              Repeatable Android animation fixture
+tools/
+  perfprobe/                    Combined external CPU/RSS/FPS/latency benchmark
+  frame-clock/                  Repeatable Android animation/touch fixture
 ```
 
 Tests and encoder benchmarks live beside their owning packages. The server injects channel-readiness checks into agent startup; the agent and native codec packages do not depend on HTTP/server state. The codec API explicitly transfers ownership of decoded pixels to the pipeline, which returns them after encoding or queue eviction. `go run .`, `go build .`, and the existing launch scripts still use the root entry point.
@@ -82,4 +81,32 @@ Video queues retain only the newest pending frame. A slow encoder or viewer drop
 
 See [PERFORMANCE.md](PERFORMANCE.md) for measurements, automated input, reproducible 60fps replay/live tests, and the limits of these latency measurements.
 
-`make resourceprobe` builds an external CPU/RAM sampler. Run `./dist/resourceprobe --server http://127.0.0.1:38475 --duration 30s --label live-60fps` while the server streams (use its announced URL if the port changed). It reports per-core CPU percentages and native-inclusive RSS, plus Go heap/GC snapshots from `/api/resources`. Use `--pid` instead for servers without that endpoint. See [PERFORMANCE.md](PERFORMANCE.md#cpu-and-ram) for idle/load comparisons and interpretation.
+From `plugin/`, run `npm run test:perf` for an isolated replay with aligned CPU,
+RSS, FPS, and latency measurements. Add `-- --device emulator-5554 --browser` for
+the actual React input/presentation path on a dedicated emulator. All load
+generation and process sampling live in `tools/perfprobe`, outside the server;
+`make perfprobe` builds it separately. See [PERFORMANCE.md](PERFORMANCE.md).
+
+## Video Transport
+
+The plugin uses binary JPEG messages on `/video`, decodes at most one frame at
+a time, and retains only the newest pending frame for direct canvas drawing.
+The standalone test page still uses `/stream` MJPEG. Both share immutable JPEGs
+and one-frame subscriber queues. Slow WebSocket writes time out after 250ms.
+
+Each `/video?display=0` binary message contains a 40-byte header followed by JPEG:
+
+| Offset | Field (little-endian except ASCII magic) |
+| ---: | --- |
+| 0 | `VDJP` magic, 4 bytes |
+| 4 | Display ID, int32 |
+| 8, 12 | Logical display width / height, uint32 |
+| 16 | Orientation, uint32 (0-3) |
+| 20 | Frame number, uint32 |
+| 24 | Presentation timestamp, uint64 microseconds |
+| 32 | Server processing, uint64 microseconds (0 for cached startup) |
+
+Control messages may include a `requestId` to receive an `input-ack` with that ID
+and `serverForwardUs`. The ACK confirms the agent socket write only. Normal UI
+commands omit this field. Adjacent unacknowledged MOVE commands may be coalesced;
+gesture/key boundaries and acknowledged commands remain ordered.

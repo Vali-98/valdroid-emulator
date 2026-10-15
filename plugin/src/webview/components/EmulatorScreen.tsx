@@ -1,15 +1,21 @@
-import type * as React from 'react';
+import * as React from 'react';
+import { startVideo } from '../video';
 
 export function EmulatorScreen({ serverUrl, imageRef, screenProps }: {
 	serverUrl: string;
-	imageRef: React.RefObject<HTMLImageElement | null>;
-	screenProps: React.ImgHTMLAttributes<HTMLImageElement>;
+	imageRef: React.RefObject<HTMLCanvasElement | null>;
+	screenProps: React.CanvasHTMLAttributes<HTMLCanvasElement>;
 }) {
-	return <div className="screen-frame"><img {...screenProps}
+	React.useEffect(() => {
+		const image = imageRef.current;
+		if (image) {return startVideo(serverUrl, image);}
+	}, [serverUrl, imageRef]);
+	return <div className="screen-frame"><canvas {...screenProps}
 		ref={imageRef}
 		id="screen"
-		src={`${serverUrl}/stream`}
-		alt="Android emulator display"
+		aria-label="Android emulator display"
+		width={0}
+		height={0}
 		draggable={false}
 		tabIndex={0}
 	/></div>;
