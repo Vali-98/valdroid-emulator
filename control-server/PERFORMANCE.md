@@ -4,7 +4,7 @@ The target is sustained 60fps with bounded queueing, not a backlog that reports 
 
 ## Encoder Baseline
 
-Measured on an Apple M4, darwin/arm64, at 1080x2400 and JPEG quality 95 using the deterministic UI-like image in `pipeline_benchmark_test.go`:
+Measured on an Apple M4, darwin/arm64, at 1080x2400 and JPEG quality 95 using the deterministic UI-like image in `internal/codec/pipeline_benchmark_test.go`:
 
 | Encoder | Average encode time | Go bytes allocated per encode |
 | --- | ---: | ---: |
@@ -147,11 +147,40 @@ and CPU/GPU work performed in separate OS services. Native execution on Windows
 and Linux still needs measurement. Compare resource reports alongside frame
 pacing, since lower CPU achieved by dropping frames is not an optimization win.
 
+## Package Refactor Recheck (2026-10-15)
+
+Fresh measurements after separating agent, codec, device, diagnostics, and server
+packages. Same Apple M4 / 10 logical CPUs, ImageIO JPEG95, 1080x2400 high-detail
+replay, one MJPEG subscriber; resource sampling interval 250ms:
+
+| Scenario | Duration | Mean CPU | CPU p95 | Mean RSS | Peak sampled RSS | RSS growth |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fresh idle | 10s | 0.013% | 0% | 12.78 MiB | 13.06 MiB | 0.77 MiB |
+| Sustained 60fps | 60s | 37.06% | 39.51% | 125.40 MiB | 125.52 MiB | 0.47 MiB |
+
+CPU remains per-core: 37.06% means about 0.37 of one core, not 37% of the entire
+10-core machine. Idle includes a one-time request verifying the relocated test
+page. The loaded window starts after eight seconds of warmup. There were 72 Go
+collections with 3.50ms total GC pause time during the loaded minute. Live Go heap
+was 33.38 MiB at the start and 58.26 MiB at the end; these are different points in
+the collection cycle, while reserved Go heap and process RSS stayed essentially
+flat. A single before/after heap value is not a leak diagnosis.
+
+The accompanying 80-second frame probe delivered all 4,800 frames at 60fps with
+17.53ms p95 / 17.85ms p99 receive gaps. The maximum gap was 43.76ms, so occasional
+hitches remain despite healthy average throughput. Server processing averaged
+7.88ms (8.63ms p95). There were no client drops or decode/encode errors; one
+pending frame was replaced during startup, outside the measurement window.
+
+This run does not show an immediate CPU/RAM bottleneck or a resource regression
+from the package changes. Longer soak tests and native Linux/Windows measurements
+are still needed before claiming leak freedom or universal 60fps behavior.
+
 ## Regression Checks
 
 ```sh
 make test
-go test -count 10 -run 'TestJPEG|TestDecodedQueue|TestClientQueue|TestPerformance' .
+go test -count 10 -run 'TestJPEG|TestDecodedQueue|TestClientQueue|TestPerformance' ./internal/...
 ```
 
 Tests cover AVC framing, JPEG color/dimension preservation, published-buffer ownership, newest-frame replacement/drop accounting, cached-frame startup, timing windows, audio framing, control serialization, and HTTP/WebSocket paths. The live/replay probe complements unit tests by exercising real native decoding and sustained pacing.

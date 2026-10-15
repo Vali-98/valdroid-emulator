@@ -22,7 +22,7 @@ test:
 	go vet -tags '$(GO_TAGS)' ./...
 
 benchmark:
-	go test -tags '$(GO_TAGS)' -run '^$$' -bench JPEG -benchmem -count 3 .
+	go test -tags '$(GO_TAGS)' -run '^$$' -bench JPEG -benchmem -count 3 ./internal/codec
 
 frameprobe:
 	@mkdir -p $(DIST)

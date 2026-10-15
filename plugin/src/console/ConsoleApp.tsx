@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowDownToLine, Copy, Pause, Play, RefreshCw, Search, Send, Square, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, Copy, Pause, Play, Search, Send, Smartphone, Square, Trash2 } from 'lucide-react';
 import { bridge } from './bridge';
 import { consoleLimit, filterRecords, levelRank, type ConsoleMessage, type ConsoleRecord, type ConsoleState, type LogLevel } from '../shared/console';
 
@@ -23,7 +23,6 @@ function Highlight({ text, search }: { text: string; search: string }) {
 export function ConsoleApp() {
 	const [records, setRecords] = useState<ConsoleRecord[]>([]);
 	const [state, setState] = useState<ConsoleState>({ streaming: false, busy: false, packages: [], processes: {} });
-	const [devices, setDevices] = useState<{ label: string; serial: string }[]>([]);
 	const [level, setLevel] = useState<LogLevel>((preferences.level && preferences.level in levelRank ? preferences.level : 'V') as LogLevel);
 	const [packageName, setPackageName] = useState(preferences.packageName ?? '');
 	const [search, setSearch] = useState(preferences.search ?? '');
@@ -39,7 +38,6 @@ export function ConsoleApp() {
 				case 'console-snapshot': setState(message.state); setRecords(message.records); break;
 				case 'console-state': setState(message.state); break;
 				case 'console-records': setRecords(previous => [...previous, ...message.records].slice(-consoleLimit)); break;
-				case 'console-devices': setDevices(message.devices); break;
 			}
 		};
 		window.addEventListener('message', receive);
@@ -60,12 +58,7 @@ export function ConsoleApp() {
 	};
 	return <main className="console-app">
 		<header className="console-toolbar">
-			<select aria-label="Device" value={state.serial ?? ''} onChange={event => bridge.postMessage({ type: 'console-device', serial: event.target.value })}>
-				<option value="">Select Device...</option>
-				{state.serial && !devices.some(device => device.serial === state.serial) && <option value={state.serial}>{state.serial}</option>}
-				{devices.map(device => <option key={device.serial} value={device.serial}>{device.label}</option>)}
-			</select>
-			<button title="Refresh devices" aria-label="Refresh devices" onClick={() => bridge.postMessage({ type: 'console-refresh' })}><RefreshCw size={15} /></button>
+			<span className="console-device" title={state.serial ?? 'No emulator loaded'}><Smartphone size={15} /><span>{state.serial ?? 'No emulator loaded'}</span></span>
 			<select aria-label="Package" value={packageName} onChange={event => setPackageName(event.target.value)}>
 				<option value="">All packages</option>
 				{packageName && !state.packages.includes(packageName) && <option value={packageName}>{packageName}</option>}
@@ -86,7 +79,7 @@ export function ConsoleApp() {
 			const element = event.currentTarget;
 			if (element.scrollHeight-element.scrollTop-element.clientHeight > 44) { setFollow(false); }
 		}}>
-			{!filtered.length && <div className="console-empty">{!state.serial ? 'No device selected' : records.length ? 'No matching logs' : 'Waiting for logs...'}</div>}
+			{!filtered.length && <div className="console-empty">{!state.serial ? 'No emulator loaded' : records.length ? 'No matching logs' : 'Waiting for logs...'}</div>}
 			<div className="console-log-space" style={{ height: virtual.getTotalSize() }}>
 				{virtual.getVirtualItems().map(item => {
 					const record = filtered[item.index];

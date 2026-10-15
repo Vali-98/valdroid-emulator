@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { EmulatorTarget, ExtensionMessage, HostMessage, SessionState } from '../shared/protocol';
 import { webviewHtml } from './html';
+import { applyInitialPanelSize } from './initialPanelSize';
 import { FileUploadReceiver, type PushFile } from '../lib/FileUploadReceiver';
 
 export class EmulatorViewProvider implements vscode.WebviewViewProvider {
@@ -49,6 +50,8 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 				}
 				switch (message.type) {
 					case 'ready':
+						await applyInitialPanelSize(this.context, webviewView, () => vscode.commands.executeCommand('workbench.action.increaseViewSize'))
+							.catch(error => this.output.appendLine(`Could not adjust initial emulator panel size: ${String(error)}`));
 						await this.refreshTargets();
 						this.postStatus();
 						break;

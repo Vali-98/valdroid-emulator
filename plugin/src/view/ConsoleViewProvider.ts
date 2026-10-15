@@ -1,17 +1,17 @@
 import * as vscode from 'vscode';
 import { AdbConsole } from '../lib/AdbConsole';
 import type { ConsoleMessage, ConsoleRequest } from '../shared/console';
-import type { EmulatorTarget } from '../shared/protocol';
 import { webviewHtml } from './html';
 
 export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
 	private selectedSerial?: string;
 	private readonly console: AdbConsole;
-	constructor(private readonly context: vscode.ExtensionContext, adbPath: string, private readonly discover: () => Promise<EmulatorTarget[]>) {
+	constructor(private readonly context: vscode.ExtensionContext, adbPath: string) {
 		this.console = new AdbConsole(adbPath, message => this.post(message));
 	}
 	setDevice(serial?: string): void {
+		if (serial === this.selectedSerial) { return; }
 		this.selectedSerial = serial;
 		if (this.view) { void this.console.selectDevice(serial); }
 	}
@@ -22,12 +22,7 @@ export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 		const messages = view.webview.onDidReceiveMessage(async (message: ConsoleRequest) => {
 			try {
 				switch (message.type) {
-					case 'console-ready': this.post(this.console.snapshot()); await this.refresh(); break;
-					case 'console-refresh': await this.refresh(); break;
-					case 'console-device':
-						if (message.serial && !(await this.devices()).some(device => device.serial === message.serial)) { throw new Error('Android device is no longer connected'); }
-						this.selectedSerial = message.serial || undefined;
-						await this.console.selectDevice(this.selectedSerial); break;
+					case 'console-ready': this.post(this.console.snapshot()); break;
 					case 'console-command': if (typeof message.command === 'string') { await this.console.execute(message.command); } break;
 					case 'console-cancel': await this.console.cancelCommand(); break;
 					case 'console-clear': this.console.clear(); break;
@@ -39,10 +34,6 @@ export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 		view.onDidDispose(() => { messages.dispose(); if (this.view === view) { this.view = undefined; void this.console.selectDevice(undefined); } });
 		void this.console.selectDevice(this.selectedSerial);
 	}
-	private async devices(): Promise<{ label: string; serial: string }[]> {
-		return (await this.discover()).filter(device => device.value.startsWith('device:')).map(device => ({ label: device.label, serial: device.value.slice(7) }));
-	}
-	private async refresh(): Promise<void> { this.post({ type: 'console-devices', devices: await this.devices() }); }
 	private post(message: ConsoleMessage): void { void this.view?.webview.postMessage(message); }
 	async dispose(): Promise<void> { await this.console.dispose(); }
 }

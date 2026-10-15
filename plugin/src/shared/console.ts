@@ -17,14 +17,12 @@ export interface ConsoleState {
 	processes: Record<string, string>;
 }
 export type ConsoleRequest =
-	| { type: 'console-ready' | 'console-clear' | 'console-toggle' | 'console-cancel' | 'console-refresh' | 'console-copy'; text?: string }
-	| { type: 'console-command'; command: string }
-	| { type: 'console-device'; serial: string };
+	| { type: 'console-ready' | 'console-clear' | 'console-toggle' | 'console-cancel' | 'console-copy'; text?: string }
+	| { type: 'console-command'; command: string };
 export type ConsoleMessage =
 	| { type: 'console-snapshot'; state: ConsoleState; records: ConsoleRecord[] }
 	| { type: 'console-state'; state: ConsoleState }
-	| { type: 'console-records'; records: ConsoleRecord[] }
-	| { type: 'console-devices'; devices: { label: string; serial: string }[] };
+	| { type: 'console-records'; records: ConsoleRecord[] };
 export const consoleLimit = 5000;
 export const levelRank: Record<LogLevel, number> = { V: 0, D: 1, I: 2, W: 3, E: 4, F: 5 };
 

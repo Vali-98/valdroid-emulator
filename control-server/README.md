@@ -39,14 +39,22 @@ AVC decode prerequisites by host are listed in [BUILDING.md](BUILDING.md).
 
 ## Layout
 
-- `main.go`, `http.go`, `config.go`: listeners, routes, configuration, shutdown.
-- `agent.go`, `transport.go`, `status.go`: ADB startup, agent channels, readiness.
-- `video_protocol.go`: packet headers and AVC framing/parameter sets.
-- `video_pipeline.go`, `frame_memory.go`: decoding, owned pixel buffers, latest-frame JPEG worker.
-- `video_http.go`: display metadata, cached frames, bounded MJPEG subscribers.
-- `h264_decoder_*`, `jpeg_encoder_*`: platform codecs; macOS uses VideoToolbox and ImageIO by default.
-- `audio.go`, `control.go`, `device_api.go`: audio fanout, native input, media volume.
-- `performance.go`, `cmd/frameprobe`: bounded timing telemetry and repeatable pacing tests.
+```text
+main.go                         CLI entry point
+internal/
+  agent/                        ADB installation and agent startup
+  codec/                        Native AVC/JPEG backends and pixel-buffer ownership
+  device/                       Device APIs (media volume)
+  diagnostics/                  Go heap/GC snapshots
+  server/                       Listeners, channels, streaming, control, and telemetry
+    web/                        Embedded standalone test client
+cmd/
+  frameprobe/                   Frame-pacing replay and automated input
+  resourceprobe/                External CPU/RSS sampler
+tools/frame-clock/              Repeatable Android animation fixture
+```
+
+Tests and encoder benchmarks live beside their owning packages. The server injects channel-readiness checks into agent startup; the agent and native codec packages do not depend on HTTP/server state. The codec API explicitly transfers ownership of decoded pixels to the pipeline, which returns them after encoding or queue eviction. `go run .`, `go build .`, and the existing launch scripts still use the root entry point.
 
 Video queues retain only the newest pending frame. A slow encoder or viewer drops stale work instead of accumulating latency. Each pixel buffer has one owner until encoding completes; published JPEG bytes are immutable and shared between viewers. Slow HTTP writes time out without blocking capture or other viewers.
 

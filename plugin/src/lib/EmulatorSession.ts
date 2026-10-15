@@ -117,7 +117,6 @@ export class EmulatorSession {
 		], { cwd: bundleDir, stdio: 'pipe' });
 		const child = this.serverProcess;
 		this.activeSerial = serial;
-		this.onDeviceChanged(serial);
 		child.stdout?.on('data', data => this.output.append(data.toString()));
 		child.stderr?.on('data', data => this.output.append(data.toString()));
 		child.on('exit', code => {
@@ -139,6 +138,7 @@ export class EmulatorSession {
 		}
 		if (this.serverProcess !== child) {return;}
 		this.provider.setServer(baseUrl, name);
+		this.onDeviceChanged(serial);
 		this.provider.setStatus(`Connected · ${serial}`, 'online');
 		this.output.appendLine(`Control server ready at ${baseUrl} for ${serial}`);
 	}

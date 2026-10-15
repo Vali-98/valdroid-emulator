@@ -15,7 +15,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	const emulatorPath = configuration.get<string>('emulatorPath', '') || defaultEmulatorPath();
 	const bitRate = configuration.get<number>('bitRate', 10000000);
 	const discover = () => listTargets(emulatorPath, adbPath, output);
-	const console = new ConsoleViewProvider(context, adbPath, discover);
+	const console = new ConsoleViewProvider(context, adbPath);
 	shutdownConsole = () => console.dispose();
 	let session: EmulatorSession;
 	const provider = new EmulatorViewProvider(context, discover, value => session.startTarget(value), () => session.stop(),

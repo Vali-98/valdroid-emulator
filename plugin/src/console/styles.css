@@ -15,6 +15,9 @@ input { padding: 0 7px; }
 .console-search { display: flex; align-items: center; gap: 5px; flex: 1 1 160px; min-width: 100px; }
 .console-search input { flex: 1; width: 100%; }
 .console-actions { display: flex; gap: 2px; margin-left: auto; }
+.console-device { display: inline-flex; align-items: center; gap: 6px; max-width: 190px; min-width: 0; padding: 0 5px; color: var(--vscode-descriptionForeground, #999); }
+.console-device span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.console-device svg { flex: 0 0 15px; }
 .console-log { overflow: auto; position: relative; min-height: 0; font: 12px/22px var(--vscode-editor-font-family, monospace); }
 .console-log-space { position: relative; min-width: 100%; }
 .console-line { position: absolute; top: 0; left: 0; display: flex; gap: 10px; padding: 0 8px; white-space: pre; min-width: 100%; }

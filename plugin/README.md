@@ -69,8 +69,14 @@ query cancellation, coordinate mapping, uploads, and drag/drop failure recovery.
 
 Open the **Valdroid** bottom-panel tab, use **Valdroid: Show ADB Console** in the
 Command Palette, or click the terminal icon in the Emulator view's title bar.
-The console follows the emulator's selected device and can independently select
-any connected ADB device.
+The console automatically follows the currently loaded emulator. It has no
+independent device selector; commands remain disabled until the emulator stream
+is ready, and stop when that session disconnects.
+
+On the emulator view's first visible open in a workspace, the extension applies
+one native VS Code size-increase step (60px). For a side-docked panel this widens
+it; for a bottom-docked panel VS Code adjusts height instead. Later user resizing
+is preserved. This does not set a CSS minimum width or change global layout settings.
 
 The panel includes colored logcat severity, an installed-package selector,
 minimum log-level filtering, case-insensitive text search with highlighted
