@@ -1,100 +1,89 @@
-# Plugin Structure
+# Valdroid Emulator
 
-The extension host manages emulator processes; the webview manages presentation
-and browser resources. Their message contract lives in `src/shared/protocol.ts`.
+Android emulator streaming and controls inside VS Code, with an ADB/logcat
+console that follows the device you are using.
 
-- `src/extension.ts`: VS Code activation, commands, and dependency wiring.
-- `src/lib/`: ADB discovery, child processes, and emulator/server lifecycle.
-- `src/view/`: Webview registration, typed host messages, and HTML/CSP generation.
-- `src/webview.tsx`: Browser entry point and QueryClient provider.
-- `src/console.tsx`, `src/console/`: Virtualized ADB/logcat panel and console styles.
-- `src/lib/AdbConsole.ts`: Serial-scoped logcat, command execution, metadata, and process cleanup.
-- `src/shared/console.ts`: Console messages, logcat parsing, and filters.
-- `src/webview/App.tsx`: Device selection and the connected emulator workspace.
-- `src/webview/components/`: Header, picker, screen, controls, transfer feedback,
-  and debug footer.
-- `src/webview/hooks/`: Host session, control socket, input, audio, file transfers,
-  and Dropzone integration.
-- `src/webview/api.ts`: Shared query defaults, polling, and socket URLs.
-- `src/webview/audio.ts`, `input.ts`, `upload.ts`: Browser transport and device
-  logic independent of UI components.
-- `src/webview/styles.css`: Styles bundled into `dist/webview.css` by esbuild.
+## Features
 
-## Library Choices
+- Select an Android Virtual Device or an available ADB device.
+- Stream the display and audio, with pointer and keyboard input.
+- Power, Home, Back, recent-apps, mute, and volume controls alongside the screen.
+- Fit the emulator to the available view, without scrolling off the bottom.
+- Drop files onto the display to send them to Downloads, with transfer progress.
+  APK drops transfer files; they do not automatically install them.
+- Colored logcat, package and severity filters, text search, pause, follow, copy,
+  and bounded scrollback in the **Valdroid** console.
+- Device-scoped ADB commands, command history, and cancellation.
 
-[TanStack Virtual](https://tanstack.com/virtual/latest/docs/framework/react/react-virtual)
-renders only visible console rows. `shell-quote` parses quoted ADB arguments;
-Android shell commands are passed directly to `adb shell`, never a host shell.
+The console is a command runner and log viewer, not an interactive terminal.
+Commands such as `shell getprop ro.product.model` and `install "/path/App.apk"`
+are supported; interactive shells and password prompts are not.
 
-[TanStack Query](https://tanstack.com/query/latest/docs/framework/react/overview)
-owns polling, cancellation, and upload mutation status. Queries consume their
-AbortSignal, run against localhost even when the browser reports offline, and
-discard unused cached device state. Uploads never retry automatically.
+## Requirements
 
-[react-dropzone](https://react-dropzone.js.org/) owns native drag state and file
-extraction. Keep its input inside its root and `noDragEventsBubbling` enabled;
-VS Code's host drag listeners can otherwise take over the gesture. Extraction
-errors and rejected drops are surfaced through transfer feedback.
+- Desktop VS Code 1.95 or newer. Browser-only VS Code is not supported.
+- Android SDK Platform Tools (`adb`) and an authorized device.
+- To launch an emulator: Android SDK Emulator and an existing AVD, created with
+  Android Studio's Device Manager or the Android SDK command-line tools.
+- Android 8.0/API 26 or newer for the agent; audio capture also depends on the
+  Android version and whether the app permits capture.
 
-[eslint-plugin-react-hooks](https://react.dev/reference/eslint-plugin-react-hooks)
-checks hook order and effect dependencies in both TS and TSX files.
+Packaged extensions contain the Go control server and Android agent; users do
+not need Node.js, Go, or a JDK. Consult release notes for host-native runtime
+requirements. The extension runs locally, including in Remote SSH workspaces,
+and uses the local Android SDK, not the remote machine's SDK.
 
-React state/reducers handle local selection and UI state. Pointer capture keeps
-drag gestures on the screen without window-level pointer listeners. Additional
-state stores and general-purpose hook libraries are unnecessary for this scope.
+## Getting Started
 
-## Lifecycle Rules
+1. Install the VSIX for your operating system and CPU architecture using
+   **Extensions: Install from VSIX**. Marketplace publication is being prepared.
+2. Make `adb` available on PATH and set `ANDROID_HOME` or `ANDROID_SDK_ROOT`
+   to your SDK directory, or configure the executable paths below.
+3. Run **Valdroid: Show Emulator**, select a device, and press the play button.
+4. Open **Valdroid: Show ADB Console** for that same device's logs and commands.
 
-The connected workspace unmounts when the server disconnects. It owns the
-control socket, pending upload controller, debug state, and transfer notices.
-AudioContext survives device selection so it can be resumed during the Start
-button gesture; its stream is disposed on disconnect and its context is closed
-when the app unmounts. Audio decoding stays sequential and separate from polling.
+Closing the stream also shuts down an emulator started by Valdroid; independently
+started devices are not owned by the extension. Use the debug toggle for stream
+status and the **Valdroid Emulator** output channel for startup diagnostics.
 
-Effects should synchronize external resources. Derived values such as titles,
-screen metadata, transfer status, and selection fallback belong in render logic
-or reducers instead of effects.
+## Settings
 
-## Development
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `valdroid-emulator.adbPath` | `adb` | Android Debug Bridge executable. |
+| `valdroid-emulator.emulatorPath` | SDK discovery | Override the emulator executable. |
+| `valdroid-emulator.bitRate` | `10000000` | AVC bitrate in bits per second. |
 
-Run `npm run compile` for types, hook linting, and development bundles, or
-`npm run package` for production bundles. Reload the Extension Development Host
-after rebuilding. The webview loads both JS and CSS from `dist/`.
+## Troubleshooting
 
-Run `npm test` for type checking and the Vitest/Testing Library suite, or
-`npm run test:watch` while editing. Tests cover host messages, control sockets,
-query cancellation, coordinate mapping, uploads, and drag/drop failure recovery.
+If a device is missing, check `adb devices` and accept its debugging authorization
+prompt. If an AVD is missing, check `emulator -list-avds` using the configured SDK.
+Include sanitized output-channel logs, OS/architecture, Android version, and
+extension version in bug reports.
 
-## ADB Console
+Audio starts after a user interaction and respects the client's mute/volume
+state. Android or app restrictions may still prevent audio capture.
 
-Open the **Valdroid** bottom-panel tab, use **Valdroid: Show ADB Console** in the
-Command Palette, or click the terminal icon in the Emulator view's title bar.
-The console automatically follows the currently loaded emulator. It has no
-independent device selector; commands remain disabled until the emulator stream
-is ready, and stop when that session disconnects.
+File transfers use the extension host's ADB process directly; no upload web API
+is needed. The control server is for local use only. Do not expose its ports to
+untrusted networks. The standalone HTML test page is disabled by default.
 
-On the emulator view's first visible open in a workspace, the extension applies
-one native VS Code size-increase step (60px). For a side-docked panel this widens
-it; for a bottom-docked panel VS Code adjusts height instead. Later user resizing
-is preserved. This does not set a CSS minimum width or change global layout settings.
+## Source and License
 
-The panel includes colored logcat severity, an installed-package selector,
-minimum log-level filtering, case-insensitive text search with highlighted
-matches, pause/resume, follow-latest, copy-filtered-output, and clear. Clear affects
-local scrollback only, not the Android log buffer. Logcat parsing follows Android's
-[threadtime format](https://developer.android.com/tools/logcat). Package association
-uses a process-name snapshot refreshed every five seconds, including `:worker`
-processes; terminated processes absent from the initial snapshot may remain
-unattributed. Search and filtering operate over the latest 5,000 retained lines.
+[Source code](https://github.com/Vali-98/valdroid-emulator) and
+[issue tracker](https://github.com/Vali-98/valdroid-emulator/issues).
+Valdroid's original code is AGPL-3.0-only, without warranty. You may use, modify,
+and redistribute it under that license. Covered binary distributions require
+corresponding source under the applicable terms; modified versions offered for
+remote network interaction have additional source-offer requirements.
+Third-party components retain their upstream licenses.
 
-Enter commands such as `shell getprop ro.product.model`, `shell pm list packages`,
-or `install "/path/My App.apk"` at the ADB prompt. The selected serial is always
-supplied by the extension. Up/Down navigates command history. Commands stream
-stdout/stderr, can be canceled, and time out after five minutes. This is a command
-runner and log viewer, not an interactive PTY: interactive shells, editors, and
-password prompts are not supported. Android shell pipes/quoting work after `shell`;
-host shell operators are rejected.
+Release VSIXs contain `LICENSE`, `NOTICE`, `SOURCE.md`, third-party notices,
+and the release's repository source archive. Development-only VSIXs are not releases.
 
-Logcat starts only after the console view is opened, batches UI updates, and keeps
-bounded scrollback. Device changes and extension shutdown stop its child processes;
-disconnecting retains local diagnostic output until cleared or a new device is selected.
+## Support
+
+Contributions and bug reports help keep Valdroid improving. You can also support
+development on Ko-fi.
+
+<a href="https://ko-fi.com/vali98"><img src="https://storage.ko-fi.com/cdn/kofi5.png?v=6" alt="Support me on Ko-fi" height="36"></a>

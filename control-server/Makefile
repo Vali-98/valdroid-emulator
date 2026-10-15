@@ -8,9 +8,12 @@ DIST := dist
 GOOS := $(shell go env GOOS)
 GOARCH := $(shell go env GOARCH)
 HOST_TARGET := $(GOOS)-$(GOARCH)
+VSCODE_OS := $(if $(filter windows,$(GOOS)),win32,$(GOOS))
+VSCODE_ARCH := $(if $(filter amd64,$(GOARCH)),x64,$(GOARCH))
+VSCODE_TARGET := $(VSCODE_OS)-$(VSCODE_ARCH)
 SERVER_EXT := $(if $(filter windows,$(GOOS)),.exe,)
 SERVER_BINARY := control-server-$(HOST_TARGET)$(SERVER_EXT)
-PLUGIN_BUNDLE := ../plugin/bundle/$(HOST_TARGET)
+PLUGIN_BUNDLE := ../plugin/bundle/$(VSCODE_TARGET)
 GO_TAGS ?=
 
 .PHONY: all test benchmark frameprobe resourceprobe server agent plugin-bundle clean

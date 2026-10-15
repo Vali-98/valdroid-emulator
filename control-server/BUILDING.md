@@ -14,13 +14,7 @@ go run .
 
 Install Go and MSYS2's UCRT64 MinGW-w64 toolchain (`gcc` and `g++`). The Windows decoder uses cgo and the system Media Foundation H.264 decoder, so a cgo-disabled build will compile only the unsupported-platform stub.
 
-From PowerShell, run:
-
-```powershell
-.\run_windows.ps1
-```
-
-To build without starting the server:
+From PowerShell, build the server:
 
 ```powershell
 $env:CGO_ENABLED = "1"
@@ -36,7 +30,7 @@ The Media Foundation H.264 transform must be available on the Windows installati
 Install Go, a C compiler, `pkg-config`, and the FFmpeg development libraries for `libavcodec`, `libavutil`, and `libswscale` (for example, Debian/Ubuntu packages `libavcodec-dev libavutil-dev libswscale-dev`). Then run:
 
 ```sh
-./build_linux.sh
+CGO_ENABLED=1 go build -o dist/control-server-linux-amd64 .
 ```
 
 The Linux backend links to the system FFmpeg libraries; it does not launch the `ffmpeg` executable. The same MJPEG HTTP output is retained.
@@ -49,7 +43,17 @@ Run the server before launching the agent. Ensure ADB reverse maps the agent's a
 adb reverse localabstract:screen-sharing-agent tcp:5050
 ```
 
-Run `./package-jar.sh` to build the agent and package the complete APK archive under the app_process classpath JAR name. Keeping the APK metadata is required; a JAR containing only `classes.dex` is not loadable by this agent launcher. Then run `./start_agent.sh` to push that archive and the ABI-specific native library and launch the agent. The launcher enables video and audio and requests a 10 Mb/s AVC bitrate. Browser Opus playback requires WebCodecs Opus support.
+Install JDK 17 and Android SDK platform/build-tools 36, CMake 3.22.1, and the NDK
+required by the agent's Android Gradle Plugin. Run `make agent` to build the
+complete APK archive under the app_process classpath JAR name. Keeping APK
+metadata is required; a JAR containing only `classes.dex` is not loadable by
+this agent launcher. `make plugin-bundle` builds and copies the host server,
+JAR, and Android ABI libraries into the plugin's VS Code platform directory.
+The server's startup path installs and launches the agent through ADB; separate
+launcher scripts are not required. The plugin has a WASM Opus decoder fallback.
+
+See [packaging and publishing](../docs/RELEASING.md) before distributing binaries;
+Linux's system FFmpeg dependency is not automatically bundled by this Makefile.
 
 ## Tests
 

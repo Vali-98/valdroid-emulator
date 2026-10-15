@@ -1,9 +1,21 @@
 {
   "name": "valdroid-emulator",
   "displayName": "Valdroid Emulator",
-  "description": "Control Android emulators from a VS Code side panel, with room for additional device panels.",
+  "description": "Android emulator streaming, device controls, file transfers, and an ADB/logcat console inside VS Code.",
   "version": "0.1.0",
-  "publisher": "valdroid",
+  "publisher": "Vali-98",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Vali-98/valdroid-emulator.git",
+    "directory": "plugin"
+  },
+  "homepage": "https://github.com/Vali-98/valdroid-emulator",
+  "bugs": {
+    "url": "https://github.com/Vali-98/valdroid-emulator/issues"
+  },
+  "extensionKind": ["ui"],
+  "keywords": ["android", "emulator", "adb", "logcat"],
   "engines": {
     "vscode": "^1.95.0"
   },
@@ -108,6 +120,8 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "vsix": "node scripts/package-vsix.cjs",
+    "test:packaging": "node --test scripts/*.test.cjs",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "npm run check-types && tsc --noEmit -p tests/tsconfig.json && vitest run",
@@ -119,6 +133,7 @@
     "@types/node": "24.x",
     "@types/shell-quote": "^1.7.5",
     "@types/vscode": "^1.140.0",
+    "@vscode/vsce": "4.0.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.5.0",
     "eslint-plugin-react-hooks": "^7.1.1",

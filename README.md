@@ -1,32 +1,33 @@
-# Valdroid Emulator Stream Test
+# Valdroid Emulator
 
-This project streams and controls an Android emulator from a VS Code side panel.
+Stream and control Android emulators inside VS Code, with audio, device controls,
+drag-and-drop transfers to Downloads, and a synchronized ADB/logcat console.
 
-## Parts
+- [Features and setup](plugin/README.md)
+- [Development and architecture](docs/DEVELOPMENT.md)
+- [Server builds](control-server/BUILDING.md)
+- [Packaging and publishing](docs/RELEASING.md)
+- [Performance measurements](control-server/PERFORMANCE.md)
+- [Contributing](CONTRIBUTING.md)
 
-- `control-server/`: Go server that starts the Android screen-sharing agent, receives video/audio/control channels, decodes H.264 video, and exposes local HTTP/WebSocket endpoints for the UI.
-- `plugin/`: VS Code extension that lists Android AVDs and running ADB devices, starts the bundled control server, and renders the emulator stream in a webview panel.
-- `start_agent.sh`, `start_emu.sh`, `build_linux.sh`, `package-jar.sh`: helper scripts for local emulator, agent, and platform build workflows.
+## Build Locally
 
-## Build
+Install Node.js 22 or newer, Go, a native C/C++ toolchain, and the Android SDK
+and JDK described in the server build guide. In `control-server`, run
+`make plugin-bundle`. In `plugin`, run `npm ci`, then `npm run compile`
+and launch the Extension Development Host.
 
-Build the control server from `control-server/`:
+Bundles use VS Code platform names such as `darwin-arm64`, `darwin-x64`,
+`win32-x64`, and `linux-x64`, not Go's `windows`/`amd64` names.
 
-```sh
-make
-```
+## License
 
-This also copies the host server binary and Android agent assets into `plugin/bundle/<goos>-<goarch>/`, which is where the VS Code extension loads them from.
+Valdroid's original code is **AGPL-3.0-only**, without warranty.
+See [LICENSE](LICENSE) and [NOTICE](NOTICE). Dependencies and the vendored Android
+agent retain their upstream licenses. Contributions use the same project license.
 
-Build the VS Code extension from `plugin/`:
+## Support
 
-```sh
-npm install
-npm run package
-```
+Issues and pull requests are welcome. You can also support development on Ko-fi.
 
-## Use
-
-Open the extension in VS Code's extension development host, then run `Valdroid: Show Emulator` or open the `Android Emulator` panel. Pick an AVD or connected device, press `Start`, and use `Stop` or `x` to shut down the stream/emulator started by the extension.
-
-Android SDK tools must be available through `adb` and `emulator`, or configured with `valdroid-emulator.adbPath` and `valdroid-emulator.emulatorPath`.
+<a href="https://ko-fi.com/vali98"><img src="https://storage.ko-fi.com/cdn/kofi5.png?v=6" alt="Support me on Ko-fi" height="36"></a>

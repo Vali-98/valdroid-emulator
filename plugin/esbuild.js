@@ -1,4 +1,6 @@
 const esbuild = require("esbuild");
+const fs = require('node:fs');
+const { dependencyNotices } = require('./scripts/third-party.cjs');
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -26,6 +28,7 @@ const esbuildProblemMatcherPlugin = {
 async function main() {
 	const shared = {
 		bundle: true,
+		metafile: true,
 		minify: production,
 		sourcemap: !production,
 		sourcesContent: false,
@@ -67,9 +70,12 @@ async function main() {
 		await webviewCtx.watch();
 		await consoleCtx.watch();
 	} else {
-		await extensionCtx.rebuild();
-		await webviewCtx.rebuild();
-		await consoleCtx.rebuild();
+		const extension = await extensionCtx.rebuild();
+		const webview = await webviewCtx.rebuild();
+		const consoleView = await consoleCtx.rebuild();
+		fs.writeFileSync('dist/THIRD_PARTY_NOTICES.txt', dependencyNotices([
+			extension.metafile, webview.metafile, consoleView.metafile,
+		]));
 		await extensionCtx.dispose();
 		await webviewCtx.dispose();
 		await consoleCtx.dispose();
