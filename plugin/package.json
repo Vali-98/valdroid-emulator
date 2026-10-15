@@ -1,6 +1,6 @@
 {
   "name": "valdroid-emulator",
-  "displayName": "Val's Android Emulator",
+  "displayName": "Valdroid Emulator",
   "description": "Control Android emulators from a VS Code side panel, with room for additional device panels.",
   "version": "0.1.0",
   "publisher": "valdroid",
