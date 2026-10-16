@@ -8,3 +8,4 @@ plugin/*.vsix
 plugin/releases/
 plugin/.vscode-test/
 node_modules
+.gocache
