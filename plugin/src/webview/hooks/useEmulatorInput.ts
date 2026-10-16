@@ -37,7 +37,7 @@ export function useEmulatorInput(display: DisplayState, send: (command: object) 
 		const keyCode = androidKeyCode(event.key);
 		if (keyCode && send({ type: 'key', action, keyCode, metaState: metaState(event) })) {event.preventDefault();}
 	};
-	const screenProps: React.CanvasHTMLAttributes<HTMLCanvasElement> = {
+	const screenProps: React.HTMLAttributes<HTMLCanvasElement> = {
 		onPointerDown: event => {
 			const image = imageRef.current;
 			if (!image || pointerIdRef.current !== null || (event.pointerType === 'mouse' && event.button !== 0)) {return;}

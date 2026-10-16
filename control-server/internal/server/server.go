@@ -2,10 +2,8 @@ package server
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"flag"
-	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -15,12 +13,8 @@ import (
 	"time"
 
 	"control_server/internal/agent"
-	"control_server/internal/codec"
 	"control_server/internal/device"
 )
-
-//go:embed web/index.html
-var indexFiles embed.FS
 
 func Run() {
 	httpAddress := flag.String("http", HTTP_ADDR, "HTTP listen address")
@@ -29,15 +23,9 @@ func Run() {
 	announce := flag.Bool("announce-listeners", false, "write the actual listener addresses as a JSON line to stdout")
 	distDir := flag.String("dist-dir", "dist", "directory containing the agent archive and native libraries")
 	deviceSerial := flag.String("device-serial", "", "Android device serial; installs and starts the agent after listeners are ready")
-	testWebServer := flag.Bool("test-webserver", false, "serve the standalone HTML test page at /")
 	adbPath := flag.String("adb", "adb", "path to adb")
 	bitRate := flag.Int("bit-rate", 10000000, "agent AVC bit rate in bits per second")
-	flag.IntVar(&jpegQuality, "jpeg-quality", 95, "MJPEG quality (1-100)")
 	flag.Parse()
-	if jpegQuality < 1 || jpegQuality > 100 {
-		log.Fatal("JPEG quality must be between 1 and 100")
-	}
-	log.Printf("JPEG encoder: %s (quality %d)", codec.JPEGEncoderName, jpegQuality)
 
 	httpListener, socketListener, err := listenEndpoints(*httpAddress, *socketAddress, *autoPort)
 	if err != nil {
@@ -46,20 +34,11 @@ func Run() {
 
 	mux := http.NewServeMux()
 	device := device.New(*adbPath, *deviceSerial)
-	if *testWebServer {
-		assets, err := fs.Sub(indexFiles, "web")
-		if err != nil {
-			log.Fatal(err)
-		}
-		mux.Handle("/", http.FileServer(http.FS(assets)))
-	}
-	mux.HandleFunc("/stream", mjpegHandler)
-	mux.HandleFunc("/video", videoWebSocketHandler)
+	mux.HandleFunc("/avc", avcWebSocketHandler)
 	mux.HandleFunc("/control", controlWebSocketHandler)
 	mux.HandleFunc("/audio", audioWebSocketHandler)
 	mux.HandleFunc("/api/display-state", displayStateHandler)
 	mux.HandleFunc("/api/status", serverStatusHandler)
-	mux.HandleFunc("/api/performance", performanceHandler)
 	mux.HandleFunc("/api/resources", resourcesHandler)
 	mux.HandleFunc("/api/volume", device.VolumeHandler)
 
@@ -99,7 +78,7 @@ func Run() {
 		}
 		close(shutdownDone)
 	}()
-	log.Printf("HTTP stream: http://%s/stream", browserHost(httpListener.Addr().String()))
+	log.Printf("AVC stream: ws://%s/avc", browserHost(httpListener.Addr().String()))
 	log.Printf("Agent socket: TCP %s", socketListener.Addr())
 	if *announce {
 		if err := announceListeners(os.Stdout, httpListener, socketListener); err != nil {

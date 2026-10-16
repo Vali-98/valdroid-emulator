@@ -76,10 +76,9 @@ and connects to the addresses announced by its own server.
 
 ## Development
 
-Run `npm test` for unit/integration tests and `npm run test:perf` for an isolated
-CPU/RAM/FPS replay benchmark. Dedicated-emulator and real-browser touch tests
-are documented in [Performance Testing](https://github.com/Vali-98/valdroid-emulator/blob/main/control-server/PERFORMANCE.md).
-Benchmark executables and Chromium are development-only, not extension runtime assets.
+Run `npm test` for unit/integration tests and `npm run test:packaging` for
+bundle validation. [AVC playback and profiling](../docs/AVC-PLAYBACK.md)
+describes the current video path and live presentation checks.
 
 ## Source and License
 

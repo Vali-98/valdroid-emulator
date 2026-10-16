@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 export function webviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri, bundle = 'webview'): string {
 	const nonce = randomBytes(18).toString('base64');
 	const resource = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', name));
-	const csp = `default-src 'none'; img-src http://127.0.0.1:* data: blob:; connect-src http://127.0.0.1:* ws://127.0.0.1:*; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval';`;
+	const csp = `default-src 'none'; img-src data: blob:; connect-src http://127.0.0.1:* ws://127.0.0.1:*; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval';`;
 	return `<!doctype html>
 <html lang="en">
 <head>

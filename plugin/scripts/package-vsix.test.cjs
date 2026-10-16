@@ -50,8 +50,8 @@ test('server targets map Node platform names to Go names', () => {
   assert.throws(() => validateServerBuild('darwin-x64', buildInfo(), 'abc', true), /GOARCH=amd64/);
 });
 
-test('CGO-disabled server builds are never packaged', () => {
-  assert.throws(() => validateServerBuild('darwin-arm64', buildInfo().replace('CGO_ENABLED=1', 'CGO_ENABLED=0'), 'abc', true), /CGO_ENABLED=1/);
+test('pure Go server builds can be packaged', () => {
+  assert.doesNotThrow(() => validateServerBuild('darwin-arm64', buildInfo().replace('CGO_ENABLED=1', 'CGO_ENABLED=0'), 'abc', true));
 });
 
 test('release servers must match the clean source commit', () => {

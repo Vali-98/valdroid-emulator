@@ -20,7 +20,7 @@ and browser resources. Their message contract lives in `src/shared/protocol.ts`.
 - `src/webview/hooks/`: Host session, control socket, input, audio, file transfers,
   and Dropzone integration.
 - `src/webview/api.ts`: Shared query defaults, polling, and socket URLs.
-- `src/webview/audio.ts`, `video.ts`, `controlSender.ts`, `input.ts`, `upload.ts`: Browser transport and device
+- `src/webview/audio.ts`, `avcVideo.ts`, `controlSender.ts`, `input.ts`, `upload.ts`: Browser transport and device
   logic independent of UI components.
 - `src/webview/styles.css`: Styles bundled into `dist/webview.css` by esbuild.
 
@@ -69,13 +69,10 @@ Run `npm test` for type checking and the Vitest/Testing Library suite, or
 `npm run test:watch` while editing. Tests cover host messages, control sockets,
 query cancellation, coordinate mapping, uploads, and drag/drop failure recovery.
 
-Run `npm run test:perf` for an isolated replay with CPU, native-inclusive RSS,
-frame pacing, and server latency in one report. Requires Go/native codec tools
-and FFmpeg/libx264. `-- --device emulator-5554` uses a dedicated emulator and
-temporary touch fixture; add `--browser` to measure the actual React input and
-canvas presentation path after `npx playwright install chromium`. See
-[performance testing](../control-server/PERFORMANCE.md) for prerequisites,
-cleanup behavior, measurement boundaries, and baseline results.
+Run `npm test`, `npm run test:packaging`, and `npm run compile` for plugin
+checks. Run `make test` in control-server for Go race tests and vet.
+The host server forwards AVC without decoding it. See
+[AVC playback](AVC-PLAYBACK.md) for live presentation and host profiling.
 
 ## ADB Console
 

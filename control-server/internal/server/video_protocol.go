@@ -100,13 +100,14 @@ func (p *avcStreamParser) updateParameterSets(nalus [][]byte) bool {
 			nextPPS = nalu
 		}
 	}
+	// Published frames retain these slices; never mutate an older configuration.
 	changed := false
 	if len(nextSPS) != 0 && !bytes.Equal(p.sps, nextSPS) {
-		p.sps = append(p.sps[:0], nextSPS...)
+		p.sps = bytes.Clone(nextSPS)
 		changed = true
 	}
 	if len(nextPPS) != 0 && !bytes.Equal(p.pps, nextPPS) {
-		p.pps = append(p.pps[:0], nextPPS...)
+		p.pps = bytes.Clone(nextPPS)
 		changed = true
 	}
 	return changed

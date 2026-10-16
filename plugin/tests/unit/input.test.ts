@@ -3,8 +3,8 @@ import type * as React from 'react';
 import { androidKeyCode, mapScreenPoint, metaState, setPresentedDisplay, visibleImageRect } from '../../src/webview/input';
 
 function image() {
-	const element = document.createElement('img');
-	Object.defineProperties(element, { naturalWidth: { value: 200 }, naturalHeight: { value: 400 } });
+	const element = document.createElement('canvas');
+	Object.defineProperties(element, { width: { value: 200 }, height: { value: 400 } });
 	element.getBoundingClientRect = () => new DOMRect(10, 20, 300, 400);
 	return element;
 }
@@ -34,7 +34,7 @@ describe('screen mapping', () => {
 		expect(mapScreenPoint(image(), { ...display, orientation }, 60, 20)).toEqual({ x, y });
 	});
 	it('ignores an unloaded image or unknown device dimensions', () => {
-		expect(mapScreenPoint(document.createElement('img'), display, 10, 10)).toBeNull();
+		expect(mapScreenPoint(document.createElement('canvas'), display, 10, 10)).toBeNull();
 		expect(mapScreenPoint(image(), { ...display, width: 0 }, 10, 10)).toBeNull();
 	});
 	it('does not divide by zero in a hidden view', () => {

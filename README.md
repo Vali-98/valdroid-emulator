@@ -8,12 +8,12 @@ ADB/logcat console.
 - [Development and architecture](docs/DEVELOPMENT.md)
 - [Server builds](control-server/BUILDING.md)
 - [Packaging and publishing](docs/RELEASING.md)
-- [Performance measurements](control-server/PERFORMANCE.md)
+- [AVC playback and profiling](docs/AVC-PLAYBACK.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Build Locally
 
-Install Node.js 22 or newer, Go, a native C/C++ toolchain, and the Android SDK
+Install Node.js 22 or newer, Go, and the Android SDK
 and JDK described in the server build guide. In `control-server`, run
 `make plugin-bundle`. In `plugin`, run `npm ci`, then `npm run compile`
 and launch the Extension Development Host.

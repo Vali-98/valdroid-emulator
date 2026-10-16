@@ -30,7 +30,7 @@ function validateServerBuild(target, build, commit, development) {
   const goOS = platform === 'win32' ? 'windows' : platform;
   const goArch = arch === 'x64' ? 'amd64' : arch;
   const settings = new Set(build.split(/\r?\n/).map(line => line.trim().replace(/^build\s+/, '')));
-  for (const setting of [`GOOS=${goOS}`, `GOARCH=${goArch}`, 'CGO_ENABLED=1']) {
+  for (const setting of [`GOOS=${goOS}`, `GOARCH=${goArch}`]) {
     if (!settings.has(setting)) throw new Error(`Server must be built with ${setting}.`);
   }
   if (!development && (!settings.has(`vcs.revision=${commit}`) || !settings.has('vcs.modified=false'))) {

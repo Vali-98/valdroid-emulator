@@ -8,8 +8,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Reduce visible input latency with newest-frame WebSocket/canvas presentation,
   bounded MOVE queues, raw pointer updates, and frame-synchronized input mapping.
-- Add `npm run test:perf` for aligned CPU/RAM/FPS measurements and optional
-  dedicated-emulator/browser touch-latency tests, outside the shipped server.
+- Consolidate video on direct AVC/WebCodecs, removing legacy transports, host
+  video decoding, obsolete experiments and benchmarks.
 - Prefer loopback ports 38475/38476 and automatically resolve occupied ports
   using the control server's actual listener addresses.
 - Initial release

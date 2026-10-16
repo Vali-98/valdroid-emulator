@@ -387,3 +387,15 @@
 		color: #fff;
 		background: #080808;
 	}
+
+.video-status {
+ position: absolute;
+ bottom: 6px;
+ left: 6px;
+ right: 6px;
+ padding: 5px;
+ background: var(--vscode-editor-background);
+ font-size: 11px;
+ overflow-wrap: anywhere;
+ z-index: 2;
+}

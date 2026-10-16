@@ -10,7 +10,7 @@ This grant does not relicense third-party material. In particular:
 
 - control-server/third_party/screen_sharing_service retains its upstream
   copyright notices and Apache License 2.0 (LICENSE.txt in that directory).
-- JavaScript, Go, codec, and build-tool dependencies retain their own licenses.
+- JavaScript, Go, audio codec, and build-tool dependencies retain their own licenses.
   Distributions must retain the applicable notices and license texts.
 
 Source: https://github.com/Vali-98/valdroid-emulator

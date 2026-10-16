@@ -1,8 +1,8 @@
 import * as React from 'react';
 import type { DisplayState } from '../shared/protocol';
 
-export type ScreenElement = HTMLImageElement | HTMLCanvasElement;
-const dimensions = (image: ScreenElement) => image instanceof HTMLCanvasElement ? { width: image.width, height: image.height } : { width: image.naturalWidth, height: image.naturalHeight };
+export type ScreenElement = HTMLCanvasElement;
+const dimensions = (image: ScreenElement) => ({ width: image.width, height: image.height });
 const presentedDisplays = new WeakMap<ScreenElement, DisplayState>();
 export function setPresentedDisplay(image: ScreenElement, display?: DisplayState) {
 	if (display) {presentedDisplays.set(image, display);} else {presentedDisplays.delete(image);}

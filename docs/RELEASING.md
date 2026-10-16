@@ -20,32 +20,31 @@ them; a moving default-branch link does not identify a released binary's source.
 ## Build a VSIX
 
 Use the pinned official `@vscode/vsce` installed by `npm ci` in `plugin`.
-Node.js 22 or newer is required. Build native components on the target host;
-CGO-disabled builds compile but cannot decode video and must not be shipped.
+Node.js 22 or newer is required. The host server is pure Go and uses
+CGO_ENABLED=0; video decoding runs in the VS Code webview through WebCodecs.
+The Android agent still requires its SDK/NDK/JDK build tools.
 
-| VS Code target | Go OS / architecture | Native decoder |
-| --- | --- | --- |
-| `darwin-arm64` | `darwin/arm64` | Apple VideoToolbox |
-| `darwin-x64` | `darwin/amd64` | Apple VideoToolbox |
-| `linux-x64` | `linux/amd64` | FFmpeg |
-| `linux-arm64` | `linux/arm64` | FFmpeg |
-| `win32-x64` | `windows/amd64` | Media Foundation |
+| VS Code target | Go OS / architecture |
+| --- | --- |
+| darwin-arm64 | darwin/arm64 |
+| darwin-x64 | darwin/amd64 |
+| linux-x64 | linux/amd64 |
+| linux-arm64 | linux/arm64 |
+| win32-x64 | windows/amd64 |
 
-This is the packaging map, not a claim that all native distributions are validated.
-macOS ARM64 is locally verified. Linux needs a portable codec runtime strategy,
-its licenses/source, and clean-machine loader tests. Windows needs native
-toolchain/runtime validation. Do not publish those targets before this work is
-complete. Windows ARM64, Alpine, and web are not packaging targets.
+macOS ARM64 is locally verified. Validate startup, WebCodecs AVC support,
+audio, and shutdown on each target before publishing. Windows ARM64, Alpine,
+and web are not packaging targets.
 
 1. Set the version in `plugin/package.json` and update its lockfile/changelog.
-2. Commit source changes. Run `make plugin-bundle` in `control-server` on the
-   target host, with the native dependencies and Android SDK/JDK installed.
+2. Commit source changes. Run `make plugin-bundle` in `control-server` with the
+   Android SDK/NDK/JDK installed.
 3. In `plugin`, run `npm ci`, `npm test`, and `npm run test:packaging`.
 4. Run `npm run vsix -- --target darwin-arm64` (replace the target as appropriate).
 5. Install the VSIX from `plugin/releases` in clean VS Code and test startup,
    input, audio, file transfers, console, and shutdown.
 
-The helper checks the server's OS/architecture, CGO setting, commit, and clean
+The helper checks the server's OS/architecture, commit, and clean
 build state. It requires the Android JAR and all four ABI libraries, gathers JS
 license texts, includes only the chosen native bundle, preserves executable bits,
 and removes temporary staging files. It does not prove native runtime portability
@@ -91,7 +90,6 @@ No workflow currently uploads to Marketplace.
 - [VS Code publishing and targets](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)
 - [Official vsce trusted publishing](https://github.com/microsoft/vscode-vsce#trusted-publishing)
 - [AGPL-3.0-only](https://spdx.org/licenses/AGPL-3.0-only.html)
-- [FFmpeg distribution](https://ffmpeg.org/legal.html)
 
 ## Donations
 

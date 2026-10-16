@@ -83,16 +83,6 @@ func TestParseAVCDecoderConfigurationRecord(t *testing.T) {
 	}
 }
 
-func TestSendLatestFrameReplacesStaleFrame(t *testing.T) {
-	queue := make(chan decodedFrame, 1)
-	for _, timestamp := range []int64{1000, 2000, 3000} {
-		sendLatestFrame(queue, decodedFrame{metadata: streamFrame{presentationUS: timestamp}})
-	}
-	if got := (<-queue).metadata.presentationUS; got != 3000 {
-		t.Fatalf("queued timestamp = %d, want latest timestamp 3000", got)
-	}
-}
-
 func TestEncodeInputCommand(t *testing.T) {
 	motion, err := encodeInputCommand(inputCommand{
 		Type: "motion",
