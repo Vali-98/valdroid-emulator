@@ -59,3 +59,10 @@ transport before receipt, and compositor/display scanout after submission.
 
 For host process sampling, run npm run profile:host with the same server URL,
 duration, and an output path. It samples /api/resources and host CPU/RSS.
+
+The webview's debug section shows presentation FPS, frame age, decoder queue,
+frame counts, and server resource usage. Server resources are polled every two
+seconds while debug is open. CPU uses process CPU-time deltas, with 100% meaning
+one fully occupied core. Memory shows Go heap usage and reserved heap capacity,
+not total process RSS or emulator memory. The CPU field requires an updated
+server; unsupported platforms show an unavailable value.

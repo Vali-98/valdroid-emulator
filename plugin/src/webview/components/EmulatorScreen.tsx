@@ -1,20 +1,23 @@
 import * as React from 'react';
-import { startAVCVideo } from '../avcVideo';
+import { startAVCVideo, type VideoStats } from '../avcVideo';
 
-export function EmulatorScreen({ serverUrl, imageRef, screenProps }: {
+export function EmulatorScreen({ serverUrl, imageRef, screenProps, status, onStatus, onStats, attempt, onRestart }: {
 	serverUrl: string;
 	imageRef: React.RefObject<HTMLCanvasElement | null>;
 	screenProps: React.HTMLAttributes<HTMLCanvasElement>;
+	status: string;
+	onStatus: (status: string) => void;
+	onStats: (stats: VideoStats | undefined) => void;
+	attempt: number;
+	onRestart: () => void;
 }) {
-	const [status, setStatus] = React.useState('Starting AVC playback…');
-	const [attempt, restart] = React.useReducer(value => value + 1, 0);
 	React.useEffect(() => {
 		const screen = imageRef.current;
-		if (screen) {return startAVCVideo(serverUrl, screen, setStatus, setStatus);}
-	}, [serverUrl, imageRef, attempt]);
+		if (screen) {return startAVCVideo(serverUrl, screen, onStatus, onStatus, onStats);}
+	}, [serverUrl, imageRef, attempt, onStatus, onStats]);
 	const props = { ...screenProps, id: 'screen', 'aria-label': 'Android emulator display', draggable: false, tabIndex: 0 };
 	return <div className="screen-frame">
 		<canvas {...props} ref={imageRef} width={0} height={0} />
-		<div className="video-status" role="status">{status} <button onClick={restart}>Restart playback</button></div>
+		{status !== 'Playing' && <div className="video-status" role="status">{status} <button onClick={onRestart}>Restart playback</button></div>}
 	</div>;
 }

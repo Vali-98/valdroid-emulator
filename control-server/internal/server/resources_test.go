@@ -22,4 +22,10 @@ func TestResourceSnapshotReportsCurrentProcessAndHeap(t *testing.T) {
 	if response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("runtime snapshots must not be cached")
 	}
+	if stats.SampledAtMS <= 0 {
+		t.Fatal("resource snapshot must include its sample time")
+	}
+	if stats.CPUTimeNS != nil && *stats.CPUTimeNS == 0 {
+		t.Fatal("process CPU time must include work already performed")
+	}
 }

@@ -20,7 +20,7 @@ if (!Number.isFinite(seconds) || seconds<1 || seconds>300) throw new Error('Dura
   await page.evaluate(base=>{window.acquireVsCodeApi=()=>({postMessage(message){if(message.type==='ready')queueMicrotask(()=>window.dispatchEvent(new MessageEvent('message',{data:{type:'status',state:'online',status:'Profile',serverUrl:base,deviceName:'AVC profiling'}})));}});},base);
   await page.addScriptTag({path:path.join(__dirname,'../dist/webview.js')});
   for(let i=0;i<200;i++) {
-   const state=await page.locator('.video-status').textContent();
+   const state=await page.locator('.video-status').count()?await page.locator('.video-status').textContent():'Playing';
    if(i%20===0) console.error(state);
    if(/failed|disconnected|unavailable|cannot keep up|error|backlog|does not support/i.test(state)) throw new Error(`Direct AVC failed: ${state}`);
    if(await page.evaluate(()=>Boolean(document.querySelector('canvas')?.dataset.avcProfile))) break;
@@ -32,7 +32,7 @@ if (!Number.isFinite(seconds) || seconds<1 || seconds>300) throw new Error('Dura
   while(Date.now()-start<seconds*1000){
    await page.getByRole('button',{name:'Recent apps',exact:true}).click();await page.waitForTimeout(100);
    await page.getByRole('button',{name:'Recent apps',exact:true}).click();await page.waitForTimeout(600);
-   const state=await page.locator('.video-status').textContent();
+   const state=await page.locator('.video-status').count()?await page.locator('.video-status').textContent():'Playing';
    if(/failed|disconnected|unavailable|cannot keep up|error|backlog|does not support/i.test(state))throw new Error(state);
    foreground.push(adb(['shell','dumpsys','activity','activities']).split('\n').filter(line=>line.includes('topResumedActivity')).join(' ').trim());
    samples.push({elapsedMs:Date.now()-start,...await read()});
