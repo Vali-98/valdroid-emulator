@@ -50,9 +50,21 @@ input mapping. Native pointer listeners cancel active gestures on teardown.
 CPU percentage is computed from successive successful query samples. Console
 preferences persist in user events, not a synchronization effect.
 
+The host monitors the active device and agent channels with sequential health
+checks every two seconds, allowing one transient failure. Stopping cancels the
+monitor and any startup request. Unexpected loss closes the stream, refreshes
+devices and sends a session notice that remains visible on the picker. Notices
+and client errors are written to the Valdroid Emulator output channel. An
+unchanged screen does not count as a failure.
+
+Startup and keyframe initialization share a centered shimmer loading bar. After
+90 seconds of continuous initialization, a white retry link appears below the
+status text. Retry cancels the prior attempt before restarting its original
+target. Transfer and session feedback share the same toast component.
+
 The remaining effects have external owners: host message subscriptions, control
 sockets, audio stream/context ownership and volume synchronization, native input
-listeners, upload cancellation, transfer timers, and console subscriptions/scroll.
+listeners, upload cancellation, toast/loading timers, and console subscriptions/scroll.
 Do not suppress dependency lint or replace these with render-time side effects.
 
 ## Development

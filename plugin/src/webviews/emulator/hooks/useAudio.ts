@@ -2,6 +2,7 @@ import * as React from 'react';
 import type { DeviceVolume, ServerStatus } from '../../../shared/protocol';
 import { useDeviceQuery } from '../api';
 import { startAudio, type AudioStatus, type AudioStream } from '../media/audio';
+import { vscode } from '../../shared/vscode';
 
 export function useAudio(serverUrl: string) {
 	const contextRef = React.useRef<AudioContext | undefined>(undefined);
@@ -9,10 +10,17 @@ export function useAudio(serverUrl: string) {
 	const [status, setStatus] = React.useState<AudioStatus>({ state: 'off', detail: 'Waiting for Android audio' });
 	const volume = useDeviceQuery<DeviceVolume>(serverUrl, '/api/volume', 10000);
 	const serverStatus = useDeviceQuery<ServerStatus>(serverUrl, '/api/status', 3000);
-	const update = React.useCallback((change: Partial<AudioStatus>) => setStatus(previous => {
-		const next = { ...previous, ...change };
-		return next.state === previous.state && next.detail === previous.detail ? previous : next;
-	}), []);
+	const lastError = React.useRef('');
+	const update = React.useCallback((change: Partial<AudioStatus>) => {
+		if (change.state === 'error' && change.detail && change.detail !== lastError.current) {
+			lastError.current = change.detail;
+			if (serverUrl) {vscode.postMessage({type: 'client-error', serverUrl, message: change.detail, fatal: false});}
+		} else if (change.state && change.state !== 'error') {lastError.current = '';}
+		setStatus(previous => {
+			const next = { ...previous, ...change };
+			return next.state === previous.state && next.detail === previous.detail ? previous : next;
+		});
+	}, [serverUrl]);
 	const getContext = React.useCallback(() => {
 		contextRef.current ??= new AudioContext({ sampleRate: 48000 });
 		return contextRef.current;

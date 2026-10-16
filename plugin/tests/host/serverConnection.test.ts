@@ -65,3 +65,12 @@ it('times out old or stalled servers without retaining process listeners', async
 	expect(child.listenerCount('exit')).toBe(0);
 	expect(child.listenerCount('error')).toBe(0);
 });
+
+it('cancels a superseded startup attempt without leaving listeners or timers', async () => {
+	const controller = new AbortController();
+	const pending = waitForServerAddress(child as unknown as ChildProcess, 15000, controller.signal);
+	controller.abort();
+	await expect(pending).rejects.toThrow('Startup canceled');
+	expect(child.listenerCount('exit')).toBe(0); expect(child.listenerCount('error')).toBe(0);
+	expect(vi.getTimerCount()).toBe(0);
+});

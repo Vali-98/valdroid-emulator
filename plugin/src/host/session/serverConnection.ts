@@ -4,11 +4,14 @@ import { createInterface } from 'node:readline';
 export const preferredHTTPAddress = '127.0.0.1:38475';
 export const preferredAgentAddress = '127.0.0.1:38476';
 
-export function waitForServerAddress(child: ChildProcess, timeout = 15000): Promise<string> {
+export function waitForServerAddress(child: ChildProcess, timeout = 15000, signal?: AbortSignal): Promise<string> {
 	return new Promise((resolve, reject) => {
 		if (!child.stdout) {reject(new Error('Control server did not provide its startup channel')); return;}
 		const lines = createInterface({ input: child.stdout });
+		let settled = false;
 		const finish = (error?: Error, address?: string) => {
+			if (settled) {return;} settled = true;
+			signal?.removeEventListener('abort', canceled);
 			clearTimeout(timer);
 			lines.off('line', receive);
 			lines.close();
@@ -18,6 +21,7 @@ export function waitForServerAddress(child: ChildProcess, timeout = 15000): Prom
 			if (error) {reject(error);} else {resolve(address!);}
 		};
 		const fail = (error: Error) => finish(error);
+		const canceled = () => finish(new Error('Startup canceled'));
 		const exited = (code: number | null, signal: NodeJS.Signals | null) =>
 			finish(new Error(`Control server exited before announcing its ports (${signal || code}). See the Valdroid Emulator output channel.`));
 		const receive = (line: string) => {
@@ -37,6 +41,8 @@ export function waitForServerAddress(child: ChildProcess, timeout = 15000): Prom
 		lines.on('line', receive);
 		child.once('error', fail);
 		child.once('exit', exited);
+		signal?.addEventListener('abort', canceled, {once: true});
+		if (signal?.aborted) {canceled();}
 		if (child.exitCode !== null || child.signalCode !== null) {exited(child.exitCode, child.signalCode);}
 	});
 }

@@ -9,6 +9,9 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private serverUrl?: string;
 	private deviceName?: string;
 	private uploads?: FileUploadReceiver;
+	private lastTarget?: string;
+	private noticeID = 0;
+	private retrying = false;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -18,6 +21,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		private readonly getSerial: () => string | undefined,
 		private readonly transferFile: TransferFile,
 		private readonly output: vscode.OutputChannel,
+		private readonly disconnectStream?: (reason: string) => Promise<void>,
 	) {}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -60,8 +64,24 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 						break;
 					case 'start':
 						if (message.value) {
-							this.setStatus(message.value.startsWith('avd:') ? 'Starting emulator...' : 'Starting Android agent...', 'online');
-							await this.startTarget(message.value);
+							await this.start(message.value);
+						}
+						break;
+					case 'retry':
+						if (this.lastTarget && !this.retrying) {
+							this.retrying = true;
+							try {
+								this.output.appendLine('Retrying emulator load sequence.');
+								await this.stopEmulator();
+								this.setStatus('Starting emulator and Android agent…', 'online');
+								await this.start(this.lastTarget);
+							} finally {this.retrying = false;}
+						}
+						break;
+					case 'client-error':
+						if (message.serverUrl === this.serverUrl) {
+							if (message.fatal && this.disconnectStream) {await this.disconnectStream(message.message);}
+							else {this.notify(message.message, 'error');}
 						}
 						break;
 					case 'stop':
@@ -69,10 +89,12 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 						await uploads.cancelAll();
 						await this.stopEmulator();
 						this.setServer(undefined);
+						this.notify('Disconnected from emulator.', 'info');
 						break;
 				}
 			} catch (error) {
-				this.setStatus(error instanceof Error ? error.message : String(error), 'error');
+				const detail = error instanceof Error ? error.message : String(error);
+				this.notify(detail, 'error'); this.setStatus(detail, 'error');
 			}
 		});
 		webviewView.onDidDispose(() => {
@@ -87,6 +109,12 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		this.postMessage({ type: 'targets', targets });
 	}
 
+	async start(value: string): Promise<void> {
+		this.lastTarget = value;
+		this.setStatus(value.startsWith('avd:') ? 'Starting emulator…' : 'Connecting to device…', 'online');
+		await this.startTarget(value);
+	}
+
 	setServer(serverUrl?: string, deviceName?: string): void {
 		if (this.serverUrl !== serverUrl) {void this.uploads?.cancelAll();}
 		this.serverUrl = serverUrl;
@@ -95,6 +123,12 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	async cancelUploads(): Promise<void> {await this.uploads?.cancelAll();}
+
+	notify(message: string, level: 'info' | 'error'): void {
+		this.output.appendLine(`${level === 'error' ? 'Error' : 'Notice'}: ${message}`);
+		this.noticeID = Math.max(Date.now(), this.noticeID + 1);
+		this.postMessage({type: 'notice', id: this.noticeID, message, level});
+	}
 
 	setStatus(status: string, state: SessionState): void {
 		this.postMessage({ type: 'status', status, state, serverUrl: this.serverUrl, deviceName: this.deviceName });

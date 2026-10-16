@@ -3,12 +3,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import { delay, platformTarget, runFile, terminateProcess, waitForExit } from './process';
-import { listTargets } from '../adb/targets';
+import { listRunningDevices } from '../adb/targets';
 import type { EmulatorViewProvider } from '../views/EmulatorViewProvider';
 import type { ServerStatus } from '../../shared/protocol';
 import { AdbFileTransfer } from '../files/AdbFileTransfer';
 import type { TransferFile } from '../files/FileUploadReceiver';
 import { preferredAgentAddress, preferredHTTPAddress, waitForServerAddress } from './serverConnection';
+import { monitorSession } from './monitorSession';
 
 export class EmulatorSession {
 	private serverProcess?: ChildProcess;
@@ -17,6 +18,9 @@ export class EmulatorSession {
 	private activeSerial?: string;
 	private stoppingEmulator?: Promise<void>;
 	private readonly fileTransfer: AdbFileTransfer;
+	private startup?: AbortController;
+	private stopMonitoring?: () => void;
+	private disconnecting?: Promise<void>;
 
 	constructor(
 		private readonly extensionPath: string,
@@ -33,47 +37,60 @@ export class EmulatorSession {
 	transferFile: TransferFile = (...args) => this.fileTransfer.send(...args);
 
 	async startTarget(value: string): Promise<void> {
+		if (this.disconnecting) {await this.disconnecting;}
+		this.startup?.abort();
+		const startup = new AbortController(); this.startup = startup;
 		try {
-			const serial = value.startsWith('device:') ? value.slice('device:'.length) : await this.launchAVD(value.slice('avd:'.length));
+			const serial = value.startsWith('device:') ? value.slice('device:'.length) : await this.launchAVD(value.slice('avd:'.length), startup.signal);
+			startup.signal.throwIfAborted();
 			const fallbackName = value.startsWith('device:') ? serial : value.slice('avd:'.length);
-			const name = await this.deviceName(serial, fallbackName);
-			await this.startServer(serial, name);
+			const name = await this.deviceName(serial, fallbackName, startup.signal);
+			startup.signal.throwIfAborted();
+			await this.startServer(serial, name, startup.signal);
 		} catch (error) {
+			if (startup.signal.aborted) {return;}
 			await this.stop();
 			throw error;
-		}
+		} finally {if (this.startup === startup) {this.startup = undefined;}}
 	}
 
-	private async deviceName(serial: string, fallback: string): Promise<string> {
+	private async deviceName(serial: string, fallback: string, signal: AbortSignal): Promise<string> {
 		if (!serial.startsWith('emulator-')) {return fallback;}
-		const output = await runFile(this.adbPath, ['-s', serial, 'emu', 'avd', 'name']).catch(() => '');
+		const output = await runFile(this.adbPath, ['-s', serial, 'emu', 'avd', 'name'], {signal}).catch(() => '');
 		return output.split(/\r?\n/).map(line => line.trim()).find(line => line && line !== 'OK') || fallback;
 	}
 
-	private async launchAVD(avd: string): Promise<string> {
-		const existing = (await listTargets(this.emulatorPath, this.adbPath, this.output)).find(target => target.value.startsWith('device:'));
-		if (existing) {return existing.value.slice('device:'.length);}
+	private async launchAVD(avd: string, signal: AbortSignal): Promise<string> {
+		const existing = (await listRunningDevices(this.adbPath, signal)).find(device => device.avdName === avd);
+		if (existing) {return existing.serial;}
+		signal.throwIfAborted();
 		this.output.appendLine(`Starting AVD ${avd}`);
 		this.emulatorProcess = spawn(this.emulatorPath, ['-avd', avd, '-no-window', '-gpu', 'host'], { stdio: 'ignore' });
-		this.emulatorProcess.on('error', error => this.output.appendLine(`Emulator process error: ${error.message}`));
+		const child = this.emulatorProcess;
+		let launchError: Error | undefined;
+		child.on('error', error => {launchError = error; this.output.appendLine(`Emulator process error: ${error.message}`);});
 		const deadline = Date.now() + 120000;
 		while (Date.now() < deadline) {
-			const devices = await runFile(this.adbPath, ['devices']).catch(() => '');
-			const serial = devices.split(/\r?\n/).slice(1).map(line => line.trim().split(/\s+/)).find(([id, state]) => id?.startsWith('emulator-') && state === 'device')?.[0];
+			signal.throwIfAborted();
+			if (launchError) {throw launchError;}
+			if (child.exitCode !== null || child.signalCode !== null) {throw new Error(`Emulator exited while starting ${avd} (${child.signalCode ?? child.exitCode}).`);}
+			const devices = await listRunningDevices(this.adbPath, signal).catch(() => []);
+			const serial = devices.find(device => device.avdName === avd)?.serial;
 			if (serial) {
-				const booted = await runFile(this.adbPath, ['-s', serial, 'shell', 'getprop', 'sys.boot_completed']).catch(() => '');
+				const booted = await runFile(this.adbPath, ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'], {signal}).catch(() => '');
 				if (booted.trim() === '1') {
 					this.emulatorSerial = serial;
 					return serial;
 				}
 			}
-			await delay(1000);
+			await delay(1000, signal);
 		}
 		throw new Error(`Timed out waiting for AVD ${avd} to finish booting.`);
 	}
 
-	private async startServer(serial: string, name: string): Promise<void> {
+	private async startServer(serial: string, name: string, signal: AbortSignal): Promise<void> {
 		if (this.serverProcess && !this.serverProcess.killed) {await this.stopServer();}
+		signal.throwIfAborted();
 		const target = platformTarget();
 		const bundleDir = path.join(this.extensionPath, 'bundle', target);
 		const serverName = process.platform === 'win32' ? 'control-server.exe' : 'control-server';
@@ -91,6 +108,7 @@ export class EmulatorSession {
 			'--bit-rate', String(this.bitRate),
 		], { cwd: bundleDir, stdio: 'pipe' });
 		const child = this.serverProcess;
+		let connected = false;
 		this.activeSerial = serial;
 		child.stdout?.on('data', data => this.output.append(data.toString()));
 		child.stderr?.on('data', data => this.output.append(data.toString()));
@@ -98,6 +116,7 @@ export class EmulatorSession {
 		child.on('exit', code => {
 			this.output.appendLine(`Control server exited (${code ?? 'signal'}).`);
 			if (this.serverProcess === child) {
+				if (connected) {void this.disconnect(`Control server exited (${code ?? 'signal'}).`).catch(error => this.output.appendLine(`Disconnect cleanup failed: ${String(error)}`)); return;}
 				this.serverProcess = undefined;
 				this.activeSerial = undefined;
 				this.onDeviceChanged(undefined);
@@ -108,25 +127,32 @@ export class EmulatorSession {
 		this.provider.setStatus('Starting control server and Android agent…', 'online');
 		let baseUrl: string;
 		try {
-			baseUrl = await waitForServerAddress(child);
-			await this.waitForAgent(baseUrl, child);
+			baseUrl = await waitForServerAddress(child, 15000, signal);
+			await this.waitForAgent(baseUrl, child, signal);
 		} catch (error) {
 			if (this.serverProcess === child) {await this.stopServer();}
 			throw error;
 		}
 		if (this.serverProcess !== child) {return;}
+		signal.throwIfAborted(); connected = true;
 		this.provider.setServer(baseUrl, name);
 		this.onDeviceChanged(serial);
 		this.provider.setStatus(`Connected · ${serial}`, 'online');
 		this.output.appendLine(`Control server ready at ${baseUrl} for ${serial}`);
+		this.stopMonitoring = monitorSession(this.adbPath, serial, baseUrl, reason => {
+			if (this.serverProcess === child) {void this.disconnect(reason).catch(error => this.output.appendLine(`Disconnect cleanup failed: ${String(error)}`));}
+		});
 	}
 
-	private async waitForAgent(baseUrl: string, processHandle: ChildProcess): Promise<void> {
+	private async waitForAgent(baseUrl: string, processHandle: ChildProcess, signal: AbortSignal): Promise<void> {
 		const deadline = Date.now() + 120000;
+		let nextDeviceCheck = 0;
+		let deviceFailures = 0;
 		while (Date.now() < deadline) {
+			signal.throwIfAborted();
 			if (processHandle.exitCode !== null || processHandle.signalCode !== null) {throw new Error(`Control server exited (${processHandle.signalCode || processHandle.exitCode}).`);}
 			try {
-				const response = await fetch(`${baseUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
+				const response = await fetch(`${baseUrl}/api/status`, { signal: AbortSignal.any([signal, AbortSignal.timeout(3000)]) });
 				if (response.ok) {
 					const status = await response.json() as ServerStatus;
 					if (status.agentError) {throw new Error(status.agentError);}
@@ -135,13 +161,22 @@ export class EmulatorSession {
 			} catch (error) {
 				if (error instanceof Error && error.message !== 'fetch failed' && error.name !== 'TimeoutError') {throw error;}
 			}
-			await delay(300);
+			if (this.activeSerial && Date.now() >= nextDeviceCheck) {
+				const state = await runFile(this.adbPath, ['-s', this.activeSerial, 'get-state'], {signal, timeout: 3000}).catch(() => '');
+				signal.throwIfAborted();
+				deviceFailures = state.trim() === 'device' ? 0 : deviceFailures + 1;
+				if (deviceFailures >= 2) {throw new Error(`Device ${this.activeSerial} disconnected while initializing.`);}
+				nextDeviceCheck = Date.now() + 2000;
+			}
+			await delay(300, signal);
 		}
 		throw new Error('Timed out waiting for the Android agent channels. See the Valdroid Emulator output channel.');
 	}
 
-	private async stopServer(): Promise<string | undefined> {
-		this.provider.setStatus('Stopping Android agent...', 'online');
+	private async stopServer(showProgress = true): Promise<string | undefined> {
+		this.stopMonitoring?.(); this.stopMonitoring = undefined;
+		this.provider.setServer(undefined);
+		if (showProgress) {this.provider.setStatus('Stopping Android agent...', 'online');}
 		const serial = this.activeSerial;
 		this.activeSerial = undefined;
 		this.onDeviceChanged(undefined);
@@ -157,6 +192,7 @@ export class EmulatorSession {
 	}
 
 	async stop(): Promise<void> {
+		this.startup?.abort();
 		if (this.stoppingEmulator) {return this.stoppingEmulator;}
 		this.stoppingEmulator = (async () => {
 			const serial = await this.stopServer();
@@ -164,7 +200,7 @@ export class EmulatorSession {
 			const ownedSerial = this.emulatorSerial;
 			this.emulatorProcess = undefined;
 			this.emulatorSerial = undefined;
-			if (child) {
+			if (child && child.exitCode === null && child.signalCode === null) {
 				const shutdownSerial = ownedSerial ?? serial;
 				if (shutdownSerial?.startsWith('emulator-')) {
 					await runFile(this.adbPath, ['-s', shutdownSerial, 'emu', 'kill']).catch(error => this.output.appendLine(`Could not request emulator shutdown: ${String(error)}`));
@@ -175,5 +211,16 @@ export class EmulatorSession {
 			}
 		})();
 		try {await this.stoppingEmulator;} finally {this.stoppingEmulator = undefined;}
+	}
+
+	async disconnect(reason: string): Promise<void> {
+		if (this.disconnecting) {return this.disconnecting;}
+		this.provider.setServer(undefined);
+		this.provider.notify(reason, 'error');
+		this.disconnecting = (async () => {
+			await this.stopServer(false);
+			await this.provider.refreshTargets().catch(error => this.output.appendLine(`Device refresh failed: ${String(error)}`));
+		})();
+		try {await this.disconnecting;} finally {this.disconnecting = undefined;}
 	}
 }

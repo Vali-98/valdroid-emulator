@@ -6,6 +6,9 @@ console that follows the device you are using.
 ## Features
 
 - Select an Android Virtual Device or an available ADB device.
+- Running devices are marked “(running)” in the picker. Running emulators show
+  their AVD name and serial; matching startup entries are omitted when their
+  identity can be read.
 - Stream the display and audio, with pointer and keyboard input.
 - Power, Home, Back, recent-apps, mute, and volume controls alongside the screen.
 - Fit the emulator to the available view, without scrolling off the bottom.

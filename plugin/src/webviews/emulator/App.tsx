@@ -12,18 +12,27 @@ import { useControlConnection } from './hooks/useControlConnection';
 import { useFileDrop } from './hooks/useFileDrop';
 import { useHostSession } from './hooks/useHostSession';
 import type { VideoStats } from './media/avcVideo';
+import { Toast, type ToastNotice } from './components/Toast';
 
 const initialDisplay: DisplayState = { id: 0, width: 0, height: 0, orientation: 0 };
 
-function EmulatorWorkspace({ serverUrl, session, audio, onClose }: {
+function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, startedAt, notice, onDismissNotice }: {
 	serverUrl: string;
 	session: StatusMessage;
 	audio: ReturnType<typeof useAudio>;
 	onClose: () => void;
+	onRetry: () => void;
+	startedAt?: number;
+	notice?: ToastNotice;
+	onDismissNotice: () => void;
 }) {
 	const [debugVisible, setDebugVisible] = React.useState(false);
 	const [videoStatus, setVideoStatus] = React.useState('Connecting…');
 	const [videoStats, setVideoStats] = React.useState<VideoStats>();
+	const [initialized, setInitialized] = React.useState(false);
+	const reportVideoStatus = React.useCallback((status: string) => {
+		setVideoStatus(status); if (status === 'Playing') {setInitialized(true);}
+	}, []);
 	const [attempt, restart] = React.useReducer(value => value + 1, 0);
 	const restartVideo = () => {setVideoStats(undefined); restart();};
 	const { data: display = initialDisplay } = useDeviceQuery<DisplayState>(serverUrl, '/api/display-state?display=0', 500);
@@ -35,9 +44,9 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose }: {
 			onToggleDebug={() => setDebugVisible(value => !value)} onClose={onClose} />
 		<main className="stage">
 			<DeviceRail onKey={control.sendDeviceKey} />
-			<EmulatorScreen serverUrl={serverUrl} display={display} send={control.send} status={videoStatus} onStatus={setVideoStatus}
-				onStats={setVideoStats} attempt={attempt} onRestart={restartVideo} />
-			<TransferFeedback dragging={fileDrop.dragging} notice={fileDrop.notice} onDismiss={fileDrop.dismissNotice} />
+			<EmulatorScreen serverUrl={serverUrl} display={display} send={control.send} status={videoStatus} onStatus={reportVideoStatus}
+				onStats={setVideoStats} attempt={attempt} onRestart={restartVideo} onRetry={onRetry} startedAt={initialized ? undefined : startedAt} />
+			<TransferFeedback dragging={fileDrop.dragging} notice={notice ?? fileDrop.notice} onDismiss={notice ? onDismissNotice : fileDrop.dismissNotice} />
 		</main>
 		{debugVisible && <StatusBar status={control.status} state={session.state} display={display} audio={audio}
 			serverUrl={serverUrl} videoStatus={videoStatus} video={videoStats} onRestart={restartVideo} />}
@@ -48,18 +57,21 @@ export function App() {
 	const host = useHostSession();
 	const serverUrl = host.session.serverUrl ?? '';
 	const audio = useAudio(serverUrl);
+	const notice: ToastNotice | undefined = host.notice ? {message: host.notice.message, phase: host.notice.level, startedAt: host.notice.id} : undefined;
 	if (serverUrl) {
-		return <EmulatorWorkspace key={serverUrl} serverUrl={serverUrl} session={host.session} audio={audio} onClose={host.close} />;
+		return <EmulatorWorkspace key={serverUrl} serverUrl={serverUrl} session={host.session} audio={audio} onClose={host.close}
+			onRetry={host.retry} startedAt={host.loadingStartedAt} notice={notice} onDismissNotice={host.dismissNotice} />;
 	}
 	return <div className="app">
 		<Header title="No Emulator Loaded" loaded={false} />
 		<main className="stage stage-idle">
 			<div className="idle-phone">
-			{host.session.state === 'online' ? <LoadingState status={host.session.status} /> : <DevicePicker
+			{host.session.state === 'online' ? <LoadingState status={host.session.status} startedAt={host.loadingStartedAt} onRetry={host.retry} /> : <DevicePicker
 				targets={host.targets} selected={host.selectedTarget} onSelect={host.selectTarget} onRefresh={host.refreshTargets}
-				onStart={() => {audio.resume(); host.start();}} error={host.session.state === 'error' ? host.session.status : undefined}
+				onStart={() => {audio.resume(); host.start();}}
 			/>}
 			</div>
+			{notice && <Toast key={host.notice!.id} notice={notice} onDismiss={host.dismissNotice} />}
 		</main>
 	</div>;
 }

@@ -2,6 +2,8 @@ import * as React from 'react';
 import type { DisplayState } from '../../../shared/protocol';
 import { startAVCVideo, type VideoStats } from '../media/avcVideo';
 import { useEmulatorInput } from '../hooks/useEmulatorInput';
+import { LoadingState } from './DevicePicker';
+import { vscode } from '../../shared/vscode';
 
 interface PlaybackProps {
 	serverUrl: string;
@@ -17,20 +19,25 @@ function PlaybackCanvas({serverUrl, display, send, onStatus, onStats}: PlaybackP
 	const attachScreen = React.useCallback((screen: HTMLCanvasElement | null) => {
 		imageRef.current = screen;
 		if (!screen) {return;}
-		const stop = startAVCVideo(serverUrl, screen, onStatus, onStatus, onStats);
+		const stop = startAVCVideo(serverUrl, screen, onStatus, reason => {
+			onStatus(reason);
+			vscode.postMessage({type: 'client-error', serverUrl, message: reason, fatal: true});
+		}, onStats);
 		return () => {stop(); imageRef.current = null;};
 	}, [serverUrl, imageRef, onStatus, onStats]);
 	return <canvas {...screenProps} ref={attachScreen} width={0} height={0}
 		id="screen" aria-label="Android emulator display" draggable={false} tabIndex={0} />;
 }
 
-export function EmulatorScreen({status, attempt, onRestart, ...playback}: PlaybackProps & {
+export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, ...playback}: PlaybackProps & {
 	status: string;
 	attempt: number;
 	onRestart: () => void;
+	startedAt?: number;
+	onRetry?: () => void;
 }) {
 	return <div className="screen-frame">
 		<PlaybackCanvas key={attempt} {...playback} />
-		{status !== 'Playing' && <div className="video-status" role="status">{status} <button onClick={onRestart}>Restart playback</button></div>}
+		{status !== 'Playing' && <LoadingState status={status} startedAt={startedAt} onRetry={onRetry ?? onRestart} />}
 	</div>;
 }

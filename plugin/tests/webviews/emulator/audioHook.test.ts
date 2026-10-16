@@ -5,6 +5,7 @@ import { useAudio } from '../../../src/webviews/emulator/hooks/useAudio';
 const mocks = vi.hoisted(() => ({ refetch: vi.fn(), query: vi.fn(), start: vi.fn(), resume: vi.fn(), close: vi.fn() }));
 vi.mock('../../../src/webviews/emulator/api', () => ({ useDeviceQuery: mocks.query }));
 vi.mock('../../../src/webviews/emulator/media/audio', () => ({ startAudio: mocks.start }));
+vi.mock('../../../src/webviews/shared/vscode', () => ({vscode: {postMessage: vi.fn()}}));
 
 beforeEach(() => {
 	vi.clearAllMocks();

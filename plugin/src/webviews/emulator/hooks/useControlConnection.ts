@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { socketUrl } from '../api';
 import { createControlSender } from '../input/controlSender';
+import { vscode } from '../../shared/vscode';
 
 export function useControlConnection(serverUrl: string, refreshVolume: () => unknown) {
 	const senderRef = React.useRef<ReturnType<typeof createControlSender> | undefined>(undefined);
@@ -11,12 +12,27 @@ export function useControlConnection(serverUrl: string, refreshVolume: () => unk
 		const sender = createControlSender(socket);
 		senderRef.current = sender;
 		socket.onopen = () => setStatus('Emulator connected');
-		socket.onclose = () => {window.clearTimeout(volumeTimerRef.current); setStatus('Input connection closed');};
-		socket.onerror = () => setStatus('Input connection failed');
+		let reported = false;
+		const fail = (message: string) => {
+			window.clearTimeout(volumeTimerRef.current); setStatus(message);
+			if (!reported) {reported = true; vscode.postMessage({type: 'client-error', serverUrl, message, fatal: true});}
+		};
+		socket.onclose = () => fail('Input connection closed');
+		socket.onerror = () => fail('Input connection failed');
+		let lastError = '';
+		socket.onmessage = event => {
+			try {
+				const reply = JSON.parse(String(event.data));
+				if (typeof reply.error === 'string' && reply.error !== lastError) {
+					lastError = reply.error;
+					vscode.postMessage({type: 'client-error', serverUrl, message: reply.error, fatal: false});
+				}
+			} catch { /* Ignore messages outside the control reply protocol. */ }
+		};
 		return () => {
 			window.clearTimeout(volumeTimerRef.current);
 			sender.dispose(); senderRef.current = undefined;
-			socket.onopen = socket.onclose = socket.onerror = null;
+			socket.onopen = socket.onclose = socket.onerror = socket.onmessage = null;
 			socket.close();
 		};
 	}, [serverUrl]);

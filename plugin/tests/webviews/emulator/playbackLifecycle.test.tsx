@@ -5,6 +5,7 @@ import { EmulatorScreen } from '../../../src/webviews/emulator/components/Emulat
 
 const media = vi.hoisted(() => ({start: vi.fn(), stops: [] as Array<ReturnType<typeof vi.fn>>}));
 vi.mock('../../../src/webviews/emulator/media/avcVideo', () => ({startAVCVideo: media.start}));
+vi.mock('../../../src/webviews/shared/vscode', () => ({vscode: {postMessage: vi.fn()}}));
 beforeEach(() => {
 	media.stops = [];
 	media.start.mockReset().mockImplementation(() => {const stop = vi.fn(); media.stops.push(stop); return stop;});

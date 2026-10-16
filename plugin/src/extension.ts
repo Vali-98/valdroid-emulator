@@ -19,7 +19,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	shutdownConsole = () => console.dispose();
 	let session: EmulatorSession;
 	const provider = new EmulatorViewProvider(context, discover, value => session.startTarget(value), () => session.stop(),
-		() => session.deviceSerial, (file, name, serial, signal, progress) => session.transferFile(file, name, serial, signal, progress), output);
+		() => session.deviceSerial, (file, name, serial, signal, progress) => session.transferFile(file, name, serial, signal, progress), output,
+		reason => session.disconnect(reason));
 	session = new EmulatorSession(context.extensionPath, adbPath, emulatorPath, bitRate, output, provider, serial => console.setDevice(serial));
 	shutdownExtension = async () => {await provider.cancelUploads(); await session.stop();};
 
@@ -34,10 +35,13 @@ export function activate(context: vscode.ExtensionContext): void {
 			const chosen = await vscode.window.showQuickPick(await discover(), { placeHolder: 'Select an Android AVD or connected device' });
 			if (chosen) {
 				await provider.refreshTargets();
-				await session.startTarget(chosen.value);
+				try {await provider.start(chosen.value);} catch (error) {
+					const detail = error instanceof Error ? error.message : String(error);
+					provider.notify(detail, 'error'); provider.setStatus(detail, 'error');
+				}
 			}
 		}),
-		vscode.commands.registerCommand('valdroid-emulator.stop', shutdownExtension),
+		vscode.commands.registerCommand('valdroid-emulator.stop', async () => {await shutdownExtension?.(); provider.notify('Disconnected from emulator.', 'info');}),
 		{ dispose: () => { void console.dispose(); void shutdownExtension?.(); } },
 	);
 }

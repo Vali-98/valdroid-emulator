@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { useControlConnection } from '../../../src/webviews/emulator/hooks/useControlConnection';
 import { MockSocket } from '../../helpers';
+vi.mock('../../../src/webviews/shared/vscode', () => ({vscode: {postMessage: vi.fn()}}));
 
 beforeEach(() => {MockSocket.instances = []; vi.stubGlobal('WebSocket', MockSocket);});
 

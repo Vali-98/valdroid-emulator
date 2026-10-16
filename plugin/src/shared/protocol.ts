@@ -1,12 +1,14 @@
 export interface EmulatorTarget {
 	label: string;
 	value: string;
+	avdName?: string;
 }
 
 export type SessionState = 'idle' | 'online' | 'error';
 
 export type HostMessage =
-	| { type: 'ready' | 'refresh' | 'stop' | 'close' }
+	| { type: 'ready' | 'refresh' | 'stop' | 'close' | 'retry' }
+	| { type: 'client-error'; serverUrl: string; message: string; fatal: boolean }
 	| { type: 'start'; value: string }
 	| UploadRequest;
 
@@ -33,7 +35,8 @@ export interface StatusMessage {
 	deviceName?: string;
 }
 
-export type ExtensionMessage = StatusMessage | { type: 'targets'; targets: EmulatorTarget[] } | UploadReply | UploadProgress;
+export interface SessionNotice { type: 'notice'; id: number; message: string; level: 'info' | 'error'; }
+export type ExtensionMessage = StatusMessage | SessionNotice | { type: 'targets'; targets: EmulatorTarget[] } | UploadReply | UploadProgress;
 
 export interface DisplayState {
 	id: number;
