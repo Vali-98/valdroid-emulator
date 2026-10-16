@@ -77,7 +77,7 @@ and connects to the addresses announced by its own server.
 ## Development
 
 Run `npm test` for unit/integration tests and `npm run test:packaging` for
-bundle validation. [AVC playback and profiling](../docs/AVC-PLAYBACK.md)
+bundle validation. [AVC playback and profiling](../docs/DEVELOPMENT.md#avc-playback)
 describes the current video path and live presentation checks.
 
 ## Source and License

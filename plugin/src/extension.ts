@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { EmulatorSession } from './lib/EmulatorSession';
-import { defaultEmulatorPath } from './lib/process';
-import { listTargets } from './lib/targets';
-import { EmulatorViewProvider } from './view/EmulatorViewProvider';
-import { ConsoleViewProvider } from './view/ConsoleViewProvider';
+import { EmulatorSession } from './host/session/EmulatorSession';
+import { defaultEmulatorPath } from './host/session/process';
+import { listTargets } from './host/adb/targets';
+import { EmulatorViewProvider } from './host/views/EmulatorViewProvider';
+import { ConsoleViewProvider } from './host/views/ConsoleViewProvider';
 
 let shutdownExtension: (() => Promise<void>) | undefined;
 let shutdownConsole: (() => Promise<void>) | undefined;

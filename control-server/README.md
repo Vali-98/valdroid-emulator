@@ -7,7 +7,7 @@ VideoDecoder decodes it. Audio and input use separate agent channels.
 ## Build and run
 
 Run `make plugin-bundle` to build the server and Android agent and copy them
-into the current platform's plugin bundle. See [BUILDING.md](BUILDING.md).
+into the current platform's plugin bundle. Build instructions are below.
 
 For a manual launch from this directory:
 
@@ -44,7 +44,7 @@ serverForwardUs. This confirms forwarding to the agent socket. Adjacent
 unacknowledged MOVE commands can be coalesced; gesture and key boundaries
 remain ordered.
 
-See [AVC playback](../docs/AVC-PLAYBACK.md) for the wire format and live profiling.
+See [AVC playback](../docs/DEVELOPMENT.md#avc-playback) for the wire format and live profiling.
 
 ## Layout
 
@@ -54,3 +54,45 @@ See [AVC playback](../docs/AVC-PLAYBACK.md) for the wire format and live profili
 - internal/server: listeners, AVC forwarding, audio, input, and HTTP APIs.
 
 The host server builds with CGO_ENABLED=0. Tests live beside their packages.
+
+## Building the host server
+
+Install Go, then run:
+
+```sh
+make server
+```
+
+The binary is written to dist/control-server-<goos>-<goarch>[.exe].
+Cross-compilation is supported by Go; for example:
+
+```sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/control-server-linux-amd64 .
+```
+
+## Android agent and extension bundle
+
+Install the Android SDK, NDK, CMake, and JDK required by the vendored Gradle
+project in third_party/screen_sharing_service. The agent still uses Android
+native libraries.
+
+```sh
+make agent
+make plugin-bundle
+```
+
+The bundle contains the host server, screen-sharing-agent.jar (the complete APK
+archive used by app_process), and agent-libs/<android-abi>/libscreen-sharing-agent.so.
+Supported Android ABIs are arm64-v8a, armeabi-v7a, x86, and x86_64.
+Keep the agent archive and libraries from the same build.
+
+## Checks
+
+```sh
+make test
+```
+
+Race tests require the host's Go race-detector toolchain. Production server
+builds use CGO_ENABLED=0. From plugin, run npm test, npm run test:packaging, and
+npm run compile. See [development](../docs/DEVELOPMENT.md) and
+[releasing](../docs/RELEASING.md) for the extension workflow.

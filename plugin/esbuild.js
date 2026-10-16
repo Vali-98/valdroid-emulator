@@ -51,7 +51,7 @@ async function main() {
 
 	const webviewCtx = await esbuild.context({
 		entryPoints: [
-			'src/webview.tsx'
+			'src/webviews/emulator/index.tsx'
 		],
 		format: 'iife',
 		platform: 'browser',
@@ -59,7 +59,7 @@ async function main() {
 		...shared,
 	});
 	const consoleCtx = await esbuild.context({
-		entryPoints: ['src/console.tsx'],
+		entryPoints: ['src/webviews/console/index.tsx'],
 		format: 'iife',
 		platform: 'browser',
 		outfile: 'dist/console.js',

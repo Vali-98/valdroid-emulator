@@ -1,28 +1,21 @@
-# Plugin Structure
+# Development
 
 The extension host manages emulator processes; the webview manages presentation
 and browser resources. Their message contract lives in `src/shared/protocol.ts`.
 
-- `src/extension.ts`: VS Code activation, commands, and dependency wiring.
-- `src/lib/`: ADB discovery, child processes, and emulator/server lifecycle.
-- `src/lib/AdbFileTransfer.ts`: Serial-scoped APK installation and Downloads
-  transfers. `FileUploadReceiver.ts` stages webview chunks and cleans up local files.
-- `src/lib/serverConnection.ts`: Preferred loopback endpoints and the server's
-  JSON startup announcement. Port fallback is performed by the Go listener itself.
-- `src/view/`: Webview registration, typed host messages, and HTML/CSP generation.
-- `src/webview.tsx`: Browser entry point and QueryClient provider.
-- `src/console.tsx`, `src/console/`: Virtualized ADB/logcat panel and console styles.
-- `src/lib/AdbConsole.ts`: Serial-scoped logcat, command execution, metadata, and process cleanup.
-- `src/shared/console.ts`: Console messages, logcat parsing, and filters.
-- `src/webview/App.tsx`: Device selection and the connected emulator workspace.
-- `src/webview/components/`: Header, picker, screen, controls, transfer feedback,
-  and debug footer.
-- `src/webview/hooks/`: Host session, control socket, input, audio, file transfers,
-  and Dropzone integration.
-- `src/webview/api.ts`: Shared query defaults, polling, and socket URLs.
-- `src/webview/audio.ts`, `avcVideo.ts`, `controlSender.ts`, `input.ts`, `upload.ts`: Browser transport and device
-  logic independent of UI components.
-- `src/webview/styles.css`: Styles bundled into `dist/webview.css` by esbuild.
+- src/extension.ts: activation and dependency wiring.
+- src/host/adb: discovery, commands and logcat processes.
+- src/host/session: emulator/server processes and startup announcements.
+- src/host/files: APK installation, uploads and file transfer staging.
+- src/host/views: VS Code providers, CSP and initial panel sizing.
+- src/shared: typed host/webview contracts and console parsing.
+- src/webviews/emulator: emulator UI, with media, input and transfers grouped
+  by responsibility; hooks own external resources.
+- src/webviews/console: console UI, persistence bridge and styles.
+- src/webviews/shared: emulator host bridge and shared asset declarations.
+- Each webview's index.tsx is its build entry point. Output names remain
+  dist/webview.js and dist/console.js.
+- tests/host, tests/shared and tests/webviews mirror these boundaries.
 
 ## Library Choices
 
@@ -47,17 +40,20 @@ React state/reducers handle local selection and UI state. Pointer capture keeps
 drag gestures on the screen without window-level pointer listeners. Additional
 state stores and general-purpose hook libraries are unnecessary for this scope.
 
-## Lifecycle Rules
+## Lifecycle
 
-The connected workspace unmounts when the server disconnects. It owns the
-control socket, pending upload controller, debug state, and transfer notices.
-AudioContext survives device selection so it can be resumed during the Start
-button gesture; its stream is disposed on disconnect and its context is closed
-when the app unmounts. Audio decoding stays sequential and separate from polling.
+App has no effects. AudioContext survives device selection so a Start-button
+gesture can unlock audio; the stream stops on disconnect and the context closes
+on app unmount. A keyed PlaybackCanvas owns its WebSocket/decoder through
+React ref cleanup; retries replace that canvas. Metadata updates only update
+input mapping. Native pointer listeners cancel active gestures on teardown.
+CPU percentage is computed from successive successful query samples. Console
+preferences persist in user events, not a synchronization effect.
 
-Effects should synchronize external resources. Derived values such as titles,
-screen metadata, transfer status, and selection fallback belong in render logic
-or reducers instead of effects.
+The remaining effects have external owners: host message subscriptions, control
+sockets, audio stream/context ownership and volume synchronization, native input
+listeners, upload cancellation, transfer timers, and console subscriptions/scroll.
+Do not suppress dependency lint or replace these with render-time side effects.
 
 ## Development
 
@@ -69,10 +65,10 @@ Run `npm test` for type checking and the Vitest/Testing Library suite, or
 `npm run test:watch` while editing. Tests cover host messages, control sockets,
 query cancellation, coordinate mapping, uploads, and drag/drop failure recovery.
 
-Run `npm test`, `npm run test:packaging`, and `npm run compile` for plugin
-checks. Run `make test` in control-server for Go race tests and vet.
+Run `npm run test:packaging` for packaging checks and `make test` in
+control-server for Go race tests and vet.
 The host server forwards AVC without decoding it. See
-[AVC playback](AVC-PLAYBACK.md) for live presentation and host profiling.
+[AVC playback](#avc-playback) for live presentation and host profiling.
 
 ## ADB Console
 
@@ -107,3 +103,84 @@ host shell operators are rejected.
 Logcat starts only after the console view is opened, batches UI updates, and keeps
 bounded scrollback. Device changes and extension shutdown stop its child processes;
 disconnecting retains local diagnostic output until cleared or a new device is selected.
+
+## AVC playback
+
+Video follows one path: Android agent → Go AVC parser → /avc WebSocket →
+WebCodecs VideoDecoder → canvas.
+
+The player checks the actual codec with VideoDecoder.isConfigSupported and
+configures optimizeForLatency. It decodes every compressed reference frame,
+retains only the newest decoded image for the next animation-frame paint,
+and explicitly closes VideoFrame objects. Decoder work and server queues are
+bounded. Unsupported codecs, decoder errors, and disconnects show an error;
+Restart playback starts a fresh connection. A configuration change waits for
+an IDR before decoding.
+
+The server builds one immutable Annex-B packet shared across viewers. SPS/PPS
+are copied only on configuration changes. Packet construction happens outside
+the subscriber mutex. Slow viewers are disconnected instead of dropping
+compressed reference frames.
+
+### Wire format
+
+Configuration is a JSON message with type=config, codec (an avc1 codec string),
+and display containing id, width, height, and orientation.
+
+Binary messages contain a 32-byte header followed by Annex-B NAL units:
+
+| Offset | Field |
+| ---: | --- |
+| 0 | ASCII VDAV |
+| 4 | Keyframe flag, uint8 |
+| 5–7 | Reserved |
+| 8 | Source PTS, uint64 microseconds, little-endian |
+| 16 | Server receipt Unix milliseconds, uint64 little-endian |
+| 24 | Source frame number, uint32 little-endian |
+| 28–31 | Reserved |
+
+Keyframes include SPS/PPS before the access unit.
+
+### Live profiling
+
+With the server and emulator running:
+
+```sh
+cd plugin
+npm run compile
+npm run profile -- http://127.0.0.1:38475 30 /tmp/avc-profile.json emulator-5554
+```
+
+Requires adb and Playwright Chromium. The script launches Chrome and Settings,
+uses the actual React Recent apps button, verifies both apps repeatedly become
+foreground, and writes the report outside the repository. Duration is bounded
+to 1–300 seconds. The browser test uses the compiled webview in Chromium;
+installed VS Code should also be checked.
+
+The canvas dataset avcProfile reports decode/presentation counts, superseded
+decoded images, FPS, decoder queue depth, and rolling frame age over the latest
+600 presentations. Server-to-canvas age covers server receipt through draw
+submission using same-host clocks. It excludes device capture, encoding and
+transport before receipt, and compositor/display scanout after submission.
+
+The same report includes server CPU time deltas and heap snapshots during the
+workload. CPU is a percentage of one core; it excludes the emulator and browser.
+
+The webview's debug section shows presentation FPS, frame age, decoder queue,
+frame counts, and server resource usage. Server resources are polled every two
+seconds while debug is open. CPU uses process CPU-time deltas, with 100% meaning
+one fully occupied core. Memory shows Go heap usage and reserved heap capacity,
+not total process RSS or emulator memory. The CPU field requires an updated
+server; unsupported platforms show an unavailable value.
+
+## Test and script scope
+
+Host tests cover processes, listeners, transfers and view sizing. Browser tests
+cover resource cleanup, input ordering, query cancellation, media ownership and
+file-drop failures; shared tests cover message parsing and filtering. Small unit
+tests and interaction tests at these boundaries cover different failures and
+are retained. New lifecycle tests verify retry, unmount and metadata updates.
+
+The separate host sampler is consolidated into npm run profile. Build-time
+third-party.cjs and package-vsix.cjs remain necessary for licenses and release
+validation; package-vsix.test.cjs verifies those constraints. Obsolete UI-absence assertions are removed while console session behavior remains tested.

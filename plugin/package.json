@@ -129,12 +129,11 @@
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
     "vsix": "node scripts/package-vsix.cjs",
     "test:packaging": "node --test scripts/*.test.cjs",
-    "profile:avc": "node scripts/profile-avc.cjs",
-    "profile:host": "node scripts/profile-host.cjs",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "npm run check-types && tsc --noEmit -p tests/tsconfig.json && vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "profile": "node scripts/profile.cjs"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",

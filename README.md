@@ -6,9 +6,9 @@ ADB/logcat console.
 
 - [Features and setup](plugin/README.md)
 - [Development and architecture](docs/DEVELOPMENT.md)
-- [Server builds](control-server/BUILDING.md)
+- [Server builds](control-server/README.md#building-the-host-server)
 - [Packaging and publishing](docs/RELEASING.md)
-- [AVC playback and profiling](docs/AVC-PLAYBACK.md)
+- [AVC playback and profiling](docs/DEVELOPMENT.md#avc-playback)
 - [Contributing](CONTRIBUTING.md)
 
 ## Build Locally
