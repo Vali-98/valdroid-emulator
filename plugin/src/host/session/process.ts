@@ -1,6 +1,5 @@
 import { execFile, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -42,11 +41,6 @@ export async function terminateProcess(child: ChildProcess): Promise<void> {
 		child.kill('SIGKILL');
 		await waitForExit(child, 1000);
 	}
-}
-
-export function defaultEmulatorPath(): string {
-	const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Android', 'sdk') : '');
-	return sdk ? path.join(sdk, 'emulator', process.platform === 'win32' ? 'emulator.exe' : 'emulator') : 'emulator';
 }
 
 export function platformTarget(): string {

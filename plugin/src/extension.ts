@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { EmulatorSession } from './host/session/EmulatorSession';
-import { defaultEmulatorPath } from './host/session/process';
+import { resolveAndroidTools } from './host/adb/toolPaths';
 import { listTargets } from './host/adb/targets';
 import { EmulatorViewProvider } from './host/views/EmulatorViewProvider';
 import { ConsoleViewProvider } from './host/views/ConsoleViewProvider';
@@ -11,8 +11,12 @@ let shutdownConsole: (() => Promise<void>) | undefined;
 export function activate(context: vscode.ExtensionContext): void {
 	const output = vscode.window.createOutputChannel('Valdroid Emulator');
 	const configuration = vscode.workspace.getConfiguration('valdroid-emulator');
-	const adbPath = configuration.get<string>('adbPath', 'adb');
-	const emulatorPath = configuration.get<string>('emulatorPath', '') || defaultEmulatorPath();
+	const {adbPath, emulatorPath} = resolveAndroidTools({
+		sdkPath: configuration.get<string>('sdkPath', ''), adbPath: configuration.get<string>('adbPath', ''),
+		emulatorPath: configuration.get<string>('emulatorPath', ''),
+	});
+	output.appendLine(`ADB executable: ${adbPath}`);
+	output.appendLine(`Emulator executable: ${emulatorPath}`);
 	const bitRate = configuration.get<number>('bitRate', 10000000);
 	const discover = () => listTargets(emulatorPath, adbPath, output);
 	const console = new ConsoleViewProvider(context, adbPath);
@@ -26,6 +30,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	context.subscriptions.push(
 		output,
+		vscode.commands.registerCommand('valdroid-emulator.settings', () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:Vali-98.valdroid-emulator')),
+		vscode.workspace.onDidChangeConfiguration(event => {
+			if (!['sdkPath', 'adbPath', 'emulatorPath', 'bitRate'].some(key => event.affectsConfiguration(`valdroid-emulator.${key}`))) {return;}
+			void vscode.window.showInformationMessage('Reload the window to apply Valdroid settings.', 'Reload Window').then(choice => {
+				if (choice === 'Reload Window') {return vscode.commands.executeCommand('workbench.action.reloadWindow');}
+			});
+		}),
 		vscode.window.registerWebviewViewProvider('valdroidConsole.view', console, { webviewOptions: { retainContextWhenHidden: true } }),
 		vscode.commands.registerCommand('valdroid-emulator.console', () => vscode.commands.executeCommand('workbench.view.extension.valdroidConsole')),
 		vscode.window.registerWebviewViewProvider('valdroidEmulator.view', provider, { webviewOptions: { retainContextWhenHidden: true } }),

@@ -42,8 +42,9 @@ and uses the local Android SDK, not the remote machine's SDK.
 
 1. Install the VSIX for your operating system and CPU architecture using
    **Extensions: Install from VSIX**. Marketplace publication is being prepared.
-2. Make `adb` available on PATH and set `ANDROID_HOME` or `ANDROID_SDK_ROOT`
-   to your SDK directory, or configure the executable paths below.
+2. Click the gear in the emulator panel or run **Valdroid: Settings** and set
+   **SDK Path** to your Android SDK folder. SDK environment variables, usual
+   installation folders and PATH are also supported.
 3. Run **Valdroid: Show Emulator**, select a device, and press the play button.
 4. Open **Valdroid: Show ADB Console** for that same device's logs and commands.
 
@@ -55,9 +56,20 @@ status and the **Valdroid Emulator** output channel for startup diagnostics.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `valdroid-emulator.adbPath` | `adb` | Android Debug Bridge executable. |
+| `valdroid-emulator.sdkPath` | Automatic discovery | Android SDK folder containing `platform-tools` and `emulator`. |
+| `valdroid-emulator.adbPath` | SDK discovery, then PATH | Override the Android Debug Bridge executable. |
 | `valdroid-emulator.emulatorPath` | SDK discovery | Override the emulator executable. |
 | `valdroid-emulator.bitRate` | `10000000` | AVC bitrate in bits per second. |
+
+Executable overrides take priority over SDK Path. With no SDK Path configured,
+discovery checks ANDROID_HOME, ANDROID_SDK_ROOT and the usual SDK installation
+folder for your OS, then falls back to PATH. Paths can contain spaces and support
+`~` for your home directory; do not surround them with quotes.
+
+For example, setting `valdroid-emulator.sdkPath` to
+`/Users/you/Library/Android/sdk` or `C:\\Users\\you\\AppData\\Local\\Android\\Sdk`
+configures both tools. Reload the window when prompted to apply changes.
+Resolved executable paths appear in the **Valdroid Emulator** output channel.
 
 ## Troubleshooting
 

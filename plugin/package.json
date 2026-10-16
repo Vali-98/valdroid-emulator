@@ -35,11 +35,17 @@
     "onView:valdroidEmulator.view",
     "onCommand:valdroid-emulator.start",
     "onCommand:valdroid-emulator.stop",
+    "onCommand:valdroid-emulator.settings",
     "onCommand:valdroid-emulator.show"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "valdroid-emulator.settings",
+        "title": "Valdroid: Settings",
+        "icon": "$(settings-gear)"
+      },
       {
         "command": "valdroid-emulator.show",
         "title": "Valdroid: Show Emulator"
@@ -63,7 +69,12 @@
         {
           "command": "valdroid-emulator.console",
           "when": "view == valdroidEmulator.view",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "valdroid-emulator.settings",
+          "when": "view == valdroidEmulator.view",
+          "group": "navigation@2"
         }
       ]
     },
@@ -100,22 +111,34 @@
     "configuration": {
       "title": "Valdroid Emulator",
       "properties": {
+        "valdroid-emulator.sdkPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "order": 1,
+          "description": "Android SDK folder containing platform-tools and emulator. Leave empty to discover it from ANDROID_HOME, ANDROID_SDK_ROOT, or the usual installation folder. Reload the window after changing this setting."
+        },
         "valdroid-emulator.adbPath": {
           "type": "string",
-          "default": "adb",
-          "description": "Path to Android Debug Bridge."
+          "default": "",
+          "scope": "machine-overridable",
+          "order": 2,
+          "description": "Optional path to the adb executable (adb.exe on Windows). Overrides the SDK folder. Leave empty to use SDK discovery, then PATH. Reload the window after changing this setting."
         },
         "valdroid-emulator.emulatorPath": {
           "type": "string",
           "default": "",
-          "description": "Optional path to the Android emulator executable. Defaults to the executable under ANDROID_HOME/ANDROID_SDK_ROOT."
+          "scope": "machine-overridable",
+          "order": 3,
+          "description": "Optional path to the emulator executable (emulator.exe on Windows). Overrides the SDK folder. Leave empty to use SDK discovery, then PATH. Reload the window after changing this setting."
         },
         "valdroid-emulator.bitRate": {
           "type": "integer",
           "default": 10000000,
           "minimum": 100000,
           "maximum": 100000000,
-          "description": "AVC video bitrate in bits per second."
+          "order": 4,
+          "description": "AVC video bitrate in bits per second. Reload the window after changing this setting."
         }
       }
     }
