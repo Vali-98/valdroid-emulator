@@ -26,6 +26,9 @@ export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, 
 			</select>
 			<button type="button" className="play-button" disabled={!selected} onClick={onStart} aria-label={action} title={action}><Play size={18} fill="currentColor" /></button>
 		</div>
+		{navigator.userAgent.includes('Windows') && <p className="device-performance-warning">
+			AVD performance is poor on Windows. Physical Android devices are recommended.
+		</p>}
 		{error && <div className="error-message">{error}</div>}
 	</div>;
 }

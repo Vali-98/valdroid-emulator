@@ -296,6 +296,13 @@
 		padding: 0 38px 0 14px;
 		border-radius: 999px;
 	}
+	.device-performance-warning {
+		max-width: 420px;
+		margin: 0;
+		color: var(--vscode-editorWarning-foreground, #cca700);
+		font-size: 11px;
+		line-height: 1.5;
+	}
 	.play-button {
 		display: grid;
 		place-items: center;
