@@ -62,6 +62,32 @@ it('does not poll another server when its own process fails before announcing', 
 	await rejection;
 	expect(mocks.fetch).not.toHaveBeenCalled();
 	expect(session.deviceSerial).toBeUndefined();
+	expect(mocks.runFile).toHaveBeenCalledWith('/sdk/adb', ['-s', 'physical-device', 'shell', expect.stringContaining('rm -f /data/local/tmp/screen-sharing-agent.jar')], {timeout: 5000});
+});
+
+it('removes the remote agent after stopping the server and before removing the reverse mapping', async () => {
+	const started = session.startTarget('device:physical-device');
+	await Promise.resolve();
+	child.stdout.write('{"type":"server-listening","httpUrl":"http://127.0.0.1:54321","socketAddress":"127.0.0.1:54322"}\n');
+	await started;
+	mocks.runFile.mockClear();
+	await session.stop();
+	const cleanup = mocks.runFile.mock.calls[0];
+	expect(cleanup).toEqual(['/sdk/adb', ['-s', 'physical-device', 'shell', expect.stringContaining('/proc/$pid/cmdline')], {timeout: 5000}]);
+	expect(cleanup[1][3]).toContain('/data/local/tmp/.studio/libscreen-sharing-agent.so');
+	expect(mocks.terminate.mock.invocationCallOrder[0]).toBeLessThan(mocks.runFile.mock.invocationCallOrder[0]);
+	expect(mocks.runFile.mock.calls[1][1]).toEqual(['-s', 'physical-device', 'reverse', '--remove', 'localabstract:screen-sharing-agent']);
+});
+
+it('finishes disconnecting when the device is unreachable during agent cleanup', async () => {
+	const started = session.startTarget('device:physical-device');
+	await Promise.resolve();
+	child.stdout.write('{"type":"server-listening","httpUrl":"http://127.0.0.1:54321","socketAddress":"127.0.0.1:54322"}\n');
+	await started;
+	mocks.runFile.mockRejectedValue(new Error('Device not found'));
+	await session.disconnect('Device unplugged');
+	expect(session.deviceSerial).toBeUndefined();
+	expect(provider.refreshTargets).toHaveBeenCalledOnce();
 });
 
 it('cancels startup while stopping without reconnecting from a late announcement', async () => {

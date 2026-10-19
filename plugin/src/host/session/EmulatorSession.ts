@@ -117,11 +117,7 @@ export class EmulatorSession {
 			this.output.appendLine(`Control server exited (${code ?? 'signal'}).`);
 			if (this.serverProcess === child) {
 				if (connected) {void this.disconnect(`Control server exited (${code ?? 'signal'}).`).catch(error => this.output.appendLine(`Disconnect cleanup failed: ${String(error)}`)); return;}
-				this.serverProcess = undefined;
-				this.activeSerial = undefined;
-				this.onDeviceChanged(undefined);
-				this.provider.setServer(undefined);
-				void runFile(this.adbPath, ['-s', serial, 'reverse', '--remove', 'localabstract:screen-sharing-agent']).catch(() => undefined);
+				// Startup's error handler owns cleanup until the session is connected.
 			}
 		});
 		this.provider.setStatus('Starting control server and Android agent…', 'online');
@@ -184,11 +180,23 @@ export class EmulatorSession {
 		this.serverProcess = undefined;
 		if (child) {await terminateProcess(child);}
 		if (serial) {
+			await this.removeAgent(serial);
 			await runFile(this.adbPath, ['-s', serial, 'reverse', '--remove', 'localabstract:screen-sharing-agent']).catch(error => this.output.appendLine(`Could not remove ADB reverse mapping: ${String(error)}`));
 		}
 		this.provider.setServer(undefined);
 		this.provider.setStatus('Stream server stopped', 'idle');
 		return serial;
+	}
+
+	private async removeAgent(serial: string): Promise<void> {
+		// A stale PID file must never cause an unrelated process to be killed.
+		const command = [
+			'pid=$(cat /data/local/tmp/.studio/agent.pid 2>/dev/null)',
+			'case "$pid" in ""|*[!0-9]*) ;; *) case "$(tr \'\\000\' \' \' < /proc/$pid/cmdline 2>/dev/null)" in *com.android.tools.screensharing.Main*) kill "$pid" 2>/dev/null ;; esac ;; esac',
+			'rm -f /data/local/tmp/screen-sharing-agent.jar /data/local/tmp/.studio/libscreen-sharing-agent.so /data/local/tmp/.studio/agent.pid /data/local/tmp/.studio/agent.log',
+		].join('; ');
+		await runFile(this.adbPath, ['-s', serial, 'shell', command], {timeout: 5000})
+			.catch(error => this.output.appendLine(`Could not remove Android screen-sharing agent: ${String(error)}`));
 	}
 
 	async stop(): Promise<void> {
