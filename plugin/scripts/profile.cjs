@@ -3,13 +3,14 @@ const { chromium } = require('playwright');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const base = process.argv[2] || 'http://127.0.0.1:38475';
 const seconds = Number(process.argv[3] || 30);
-const output = process.argv[4] || '/tmp/valdroid-avc-profile.json';
+const output = process.argv[4] || path.join(os.tmpdir(), 'valdroid-avc-profile.json');
 const serial = process.argv[5] || 'emulator-5554';
 if (!Number.isFinite(seconds) || seconds<1 || seconds>300) throw new Error('Duration must be 1–300 seconds');
 (async()=>{
- const adb = args => execFileSync('adb',['-s',serial,...args],{encoding:'utf8'});
+ const adb = args => execFileSync('adb',['-s',serial,...args],{encoding:'utf8',windowsHide:true});
  adb(['shell','am','start','-W','-n','com.android.chrome/com.google.android.apps.chrome.Main']);
  adb(['shell','am','start','-W','-a','android.settings.SETTINGS']);
  const browser=await chromium.launch({headless:true});

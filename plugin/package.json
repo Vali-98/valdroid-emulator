@@ -1,7 +1,7 @@
 {
   "name": "valdroid-emulator",
   "displayName": "Valdroid Emulator",
-  "description": "Android emulator streaming, device controls, file transfers, and an ADB/logcat console inside VS Code.",
+  "description": "Android emulator and logcat inside VS Code.",
   "version": "0.1.0",
   "publisher": "Vali-98",
   "license": "AGPL-3.0-only",
@@ -162,8 +162,9 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
-    "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/shell-quote": "^1.7.5",
     "@types/vscode": "^1.140.0",
     "@vscode/vsce": "4.0.0",
@@ -180,8 +181,6 @@
   "dependencies": {
     "@tanstack/react-query": "^5.104.2",
     "@tanstack/react-virtual": "^3.14.19",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
     "file-selector": "^2.1.2",
     "lucide-react": "^1.57.0",
     "opus-decoder": "^0.7.12",

@@ -83,7 +83,7 @@ state. Android or app restrictions may still prevent audio capture.
 
 File transfers use the extension host's ADB process directly; no upload web API
 is needed. The control server is for local use only. Do not expose its ports to
-untrusted networks. The standalone HTML test page is disabled by default.
+untrusted networks.
 
 Local HTTP and agent listeners prefer ports `38475` and `38476`. If another
 process is using either port, Valdroid automatically selects an available port

@@ -80,7 +80,8 @@ Entra authentication with `--azure-credential` is also supported. Avoid long-liv
 global PATs: the official guide announces retirement on December 1, 2026.
 Never put credentials in the repository or VSIX.
 
-The included CI runs plugin tests and production JS builds. The native release
+The included CI runs plugin tests, production JS builds, and Go server race
+tests and vet checks. The native release
 matrix, Android artifact job, protected publish job, Marketplace policy, and
 clean-machine tests remain to be connected before automatic releases are enabled.
 No workflow currently uploads to Marketplace.
