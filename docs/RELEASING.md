@@ -2,13 +2,15 @@
 
 ## GitHub release
 
-1. Update `plugin/package.json`, its lockfile, and `plugin/CHANGELOG.md`.
-2. Commit the final source, then push a matching tag:
+Update the changelog and commit your changes, then run from `plugin`:
 
 ```sh
-git tag -a v0.1.0 -m "Release v0.1.0"
-git push origin v0.1.0
+npm run release patch
 ```
+
+Use `patch`, `minor`, or `major`. The script bumps the manifest and lockfile,
+commits them, creates a `v` tag, and prompts before pushing the branch and tag
+to `origin`. Declining keeps the release local. A clean working tree is required.
 
 [CI](../.github/workflows/ci.yml) runs tests, builds the Android agent and five
 platform VSIX packages, then uploads them with checksums and release notes.
