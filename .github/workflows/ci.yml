@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -43,3 +45,154 @@ jobs:
       - run: npm test
       - run: npm run test:packaging
       - run: npm run package
+
+  release-tag:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check tag matches the extension version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node <<'NODE'
+          const version = require('./plugin/package.json').version;
+          if (process.env.RELEASE_TAG !== `v${version}`) {
+            throw new Error(`Release tag must be v${version}, matching plugin/package.json`);
+          }
+          NODE
+
+  android-agent:
+    needs: [release-tag, control-server, plugin]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install the agent's Android toolchain
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'cmake;3.22.1' 'ndk;28.2.13676358'
+      - name: Build an isolated copy of the Android agent
+        run: |
+          cp -a control-server/third_party/screen_sharing_service "$RUNNER_TEMP/valdroid-agent"
+          cd "$RUNNER_TEMP/valdroid-agent"
+          bash ./gradlew --no-daemon :app:assembleDebug
+      - name: Collect the agent archive and all four ABI libraries
+        run: |
+          app="$RUNNER_TEMP/valdroid-agent/app"
+          bundle="$RUNNER_TEMP/valdroid-agent-bundle"
+          mkdir -p "$bundle"
+          cp "$app/build/outputs/apk/debug/app-debug.apk" "$bundle/screen-sharing-agent.jar"
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            source="$app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib/$abi/libscreen-sharing-agent.so"
+            test -s "$source"
+            mkdir -p "$bundle/agent-libs/$abi"
+            cp "$source" "$bundle/agent-libs/$abi/libscreen-sharing-agent.so"
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-agent
+          path: ${{ runner.temp }}/valdroid-agent-bundle/
+          if-no-files-found: error
+          retention-days: 7
+
+  release-packages:
+    needs: android-agent
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win32-x64
+            goos: windows
+            goarch: amd64
+            executable: control-server.exe
+          - target: linux-x64
+            goos: linux
+            goarch: amd64
+            executable: control-server
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+            executable: control-server
+          - target: darwin-x64
+            goos: darwin
+            goarch: amd64
+            executable: control-server
+          - target: darwin-arm64
+            goos: darwin
+            goarch: arm64
+            executable: control-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # Keep this aligned with the runtime recorded in licenses/README.md.
+          go-version: '1.26.1'
+          cache-dependency-path: control-server/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-agent
+          path: plugin/bundle/${{ matrix.target }}
+      - name: Build the platform server with source provenance
+        working-directory: control-server
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          SERVER_OUTPUT: ../plugin/bundle/${{ matrix.target }}/${{ matrix.executable }}
+        run: go build -buildvcs=true -o "$SERVER_OUTPUT" .
+      - run: npm ci
+        working-directory: plugin
+      - name: Package the release VSIX
+        working-directory: plugin
+        env:
+          VSCODE_TARGET: ${{ matrix.target }}
+        run: npm run vsix -- --target "$VSCODE_TARGET"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vsix-${{ matrix.target }}
+          path: plugin/releases/*.vsix
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: release-packages
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: vsix-*
+          path: plugin/releases
+          merge-multiple: true
+      - name: Generate release checksums
+        working-directory: plugin/releases
+        run: sha256sum *.vsix > SHA256SUMS
+      - name: Create the GitHub Release and upload packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          prerelease_args=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            prerelease_args+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" plugin/releases/*.vsix plugin/releases/SHA256SUMS \
+            --verify-tag --generate-notes --title "$RELEASE_TAG" "${prerelease_args[@]}"
