@@ -59,3 +59,17 @@ it('uses native raw moves when delivered and detaches them on unmount', () => {
 		unmount(); pointer('pointerrawupdate'); expect(send).toHaveBeenCalledTimes(3);
 	} finally {Reflect.deleteProperty(HTMLCanvasElement.prototype, 'onpointerrawupdate');}
 });
+
+it('relays Enter and shifted number-row and punctuation keys', () => {
+	const { send, screen } = mount();
+	for (const [key, shiftKey] of [['Enter', false], ['!', true], ['{', true], ['?', true]] as const) {
+		fireEvent.keyDown(screen, { key, shiftKey });
+		fireEvent.keyUp(screen, { key, shiftKey });
+	}
+	expect(send.mock.calls.map(([command]) => command)).toEqual([
+		{ type:'key', action:0, keyCode:66, metaState:0 }, { type:'key', action:1, keyCode:66, metaState:0 },
+		{ type:'key', action:0, keyCode:8, metaState:1 }, { type:'key', action:1, keyCode:8, metaState:1 },
+		{ type:'key', action:0, keyCode:71, metaState:1 }, { type:'key', action:1, keyCode:71, metaState:1 },
+		{ type:'key', action:0, keyCode:76, metaState:1 }, { type:'key', action:1, keyCode:76, metaState:1 },
+	]);
+});

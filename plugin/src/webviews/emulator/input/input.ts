@@ -55,12 +55,49 @@ const keyCodes: Record<string, number> = {
 	Control: 113,
 	Alt: 57,
 	Meta: 117,
+	'`': 68,
+	'~': 68,
+	'-': 69,
+	'_': 69,
+	'=': 70,
+	'+': 70,
+	'[': 71,
+	'{': 71,
+	']': 72,
+	'}': 72,
+	'\\': 73,
+	'|': 73,
+	';': 74,
+	':': 74,
+	"'": 75,
+	'"': 75,
+	',': 55,
+	'<': 55,
+	'.': 56,
+	'>': 56,
+	'/': 76,
+	'?': 76,
+};
+
+// KeyboardEvent.key reports the character produced by shifted number keys,
+// whereas Android needs the physical number-row keycode plus the shift meta bit.
+const shiftedNumberKeyCodes: Record<string, number> = {
+	'!': 8,
+	'@': 9,
+	'#': 10,
+	'$': 11,
+	'%': 12,
+	'^': 13,
+	'&': 14,
+	'*': 15,
+	'(': 16,
+	')': 7,
 };
 
 export function androidKeyCode(key: string): number {
 	if (/^[a-z]$/i.test(key)) {return key.toUpperCase().charCodeAt(0) - 65 + 29;}
 	if (/^[0-9]$/.test(key)) {return key === '0' ? 7 : Number(key) + 7;}
-	return keyCodes[key] || 0;
+	return shiftedNumberKeyCodes[key] || keyCodes[key] || 0;
 }
 
 export function metaState(event: React.KeyboardEvent): number {

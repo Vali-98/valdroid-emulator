@@ -44,7 +44,12 @@ describe('screen mapping', () => {
 });
 
 describe('keyboard mapping', () => {
-	it.each([['a', 29], ['Z', 54], ['0', 7], ['9', 16], ['Enter', 66], ['ArrowUp', 19], ['Unidentified', 0]])('maps %s', (key, code) => {
+	it.each([
+		['a', 29], ['Z', 54], ['0', 7], ['9', 16], ['!', 8], ['@', 9], ['(', 16], [')', 7],
+		['Enter', 66], ['[', 71], ['{', 71], [']', 72], ['}', 72], ['\\', 73], ['|', 73],
+		[';', 74], [':', 74], ["'", 75], ['"', 75], ['/', 76], ['?', 76], [',', 55], ['<', 55], ['.', 56], ['>', 56],
+		['ArrowUp', 19], ['Unidentified', 0],
+	])('maps %s', (key, code) => {
 		expect(androidKeyCode(key)).toBe(code);
 	});
 	it('combines Android modifier bits', () => {
