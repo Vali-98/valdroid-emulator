@@ -2,6 +2,7 @@ export interface EmulatorTarget {
 	label: string;
 	value: string;
 	avdName?: string;
+	abi?: string;
 }
 
 export type SessionState = 'idle' | 'online' | 'error';

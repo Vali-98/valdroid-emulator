@@ -1,6 +1,7 @@
 {
   "name": "valdroid-emulator",
   "displayName": "Valdroid Emulator",
+  "icon": "media/icon.png",
   "description": "Android emulator and logcat inside VS Code.",
   "version": "0.1.3",
   "publisher": "Vali-98",
@@ -146,12 +147,7 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
-    "watch": "npm-run-all -p watch:*",
-    "watch:esbuild": "node esbuild.js --watch",
-    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "build": "npm run check-types && npm run lint && node esbuild.js",
     "vsix": "node scripts/package-vsix.cjs",
     "release": "node scripts/release.cjs",
     "test:packaging": "node --test scripts/*.test.cjs",
@@ -173,7 +169,6 @@
     "eslint": "^10.5.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^29.1.1",
-    "npm-run-all": "^4.1.5",
     "playwright": "1.64.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.1",

@@ -15,6 +15,7 @@ export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, 
 		return () => window.clearInterval(timer);
 	}, [onRefresh]);
 	const action = selected.startsWith('device:') ? 'Connect to device' : 'Start emulator';
+	const abi = targets.find(target => target.value === selected)?.abi;
 	return <div className="empty">
 		<div className="device-picker">
 			<select aria-label="Select device" value={selected} onChange={event => onSelect(event.target.value)} onFocus={onRefresh}>
@@ -26,8 +27,8 @@ export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, 
 			</select>
 			<button type="button" className="play-button" disabled={!selected} onClick={onStart} aria-label={action} title={action}><Play size={18} fill="currentColor" /></button>
 		</div>
-		{navigator.userAgent.includes('Windows') && <p className="device-performance-warning">
-			AVD performance is poor on Windows. Physical Android devices are recommended.
+		{(abi === 'x86' || abi === 'x86_64') && <p className="device-performance-warning">
+			Performance may be poor on x86 devices. ARM devices are recommended.
 		</p>}
 		{error && <div className="error-message">{error}</div>}
 	</div>;

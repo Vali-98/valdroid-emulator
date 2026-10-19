@@ -27,6 +27,7 @@ are supported; interactive shells and password prompts are not.
 ## Requirements
 
 - Desktop VS Code 1.95 or newer. Browser-only VS Code is not supported.
+- Windows x64, Linux x64/ARM64, or macOS on Apple Silicon. Intel Macs and Windows ARM64 are not supported.
 - Android SDK Platform Tools (`adb`) and an authorized device.
 - To launch an emulator: Android SDK Emulator and an existing AVD, created with
   Android Studio's Device Manager or the Android SDK command-line tools.

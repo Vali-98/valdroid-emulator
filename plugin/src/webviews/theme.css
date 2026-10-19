@@ -1,0 +1,5 @@
+:root {
+	--valdroid-primary: #51229A;
+	--valdroid-primary-hover: var(--valdroid-primary);
+	--valdroid-on-primary: #fff;
+}

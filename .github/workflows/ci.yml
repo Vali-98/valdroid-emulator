@@ -51,7 +51,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run test:packaging
-      - run: npm run package
+      - run: npm run build
 
   release-tag:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
@@ -130,10 +130,6 @@ jobs:
             goos: linux
             goarch: arm64
             executable: control-server
-          - target: darwin-x64
-            goos: darwin
-            goarch: amd64
-            executable: control-server
           - target: darwin-arm64
             goos: darwin
             goarch: arm64
@@ -167,7 +163,7 @@ jobs:
         working-directory: plugin
         env:
           VSCODE_TARGET: ${{ matrix.target }}
-        run: npm run vsix -- --target "$VSCODE_TARGET"
+        run: npm run vsix -- --release --target "$VSCODE_TARGET"
       - uses: actions/upload-artifact@v7
         with:
           name: vsix-${{ matrix.target }}
@@ -205,7 +201,7 @@ jobs:
           path: ${{ runner.temp }}/valdroid-agent-bundle
       - name: Assemble all platform bundles
         run: |
-          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-x64; do
+          for target in darwin-arm64 linux-arm64 linux-x64 win32-x64; do
             bundle="plugin/bundle/$target"
             mkdir -p "$bundle"
             cp -a "$RUNNER_TEMP/valdroid-servers/server-$target/." "$bundle/"
@@ -215,7 +211,7 @@ jobs:
         working-directory: plugin
       - name: Package the universal release VSIX
         working-directory: plugin
-        run: npm run vsix -- --universal
+        run: npm run vsix -- --release --universal
       - name: Verify universal executable permissions and report size
         working-directory: plugin
         run: |
@@ -226,8 +222,10 @@ jobs:
           package, = Path('releases').glob('*-universal.vsix')
           with ZipFile(package) as archive:
               assert b'TargetPlatform=' not in archive.read('extension.vsixmanifest')
+              bundles = {name.split('/')[2] for name in archive.namelist() if name.startswith('extension/bundle/')}
+              assert bundles == {'darwin-arm64', 'linux-arm64', 'linux-x64', 'win32-x64'}, bundles
               servers = [entry for entry in archive.infolist() if entry.filename.endswith('/control-server')]
-              assert len(servers) == 4, 'Expected all four Unix server binaries'
+              assert len(servers) == 3, 'Expected all three Unix server binaries'
               for entry in servers:
                   assert (entry.external_attr >> 16) & 0o111, f'Missing executable permissions: {entry.filename}'
           print(f'{package.name}: {package.stat().st_size:,} bytes ({package.stat().st_size / 1024**2:.2f} MiB)')

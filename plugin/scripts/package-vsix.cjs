@@ -7,13 +7,14 @@ const { parseArgs } = require('node:util');
 
 const plugin = path.resolve(__dirname, '..');
 const repository = path.resolve(plugin, '..');
-const targets = ['darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64', 'win32-x64'];
+const targets = ['darwin-arm64', 'linux-arm64', 'linux-x64', 'win32-x64'];
 const abis = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'];
 
-function selectTargets(target, universal) {
+function selectTargets(target, universal = false) {
   if (universal && target) throw new Error('Use either --universal or --target, not both.');
   if (universal) return targets;
-  if (!targets.includes(target)) throw new Error(`Select --universal or an explicit supported --target: ${targets.join(', ')}`);
+  target ??= `${process.platform}-${process.arch}`;
+  if (!targets.includes(target)) throw new Error(`Unsupported target ${target}. Supported targets: ${targets.join(', ')}`);
   return [target];
 }
 
@@ -48,27 +49,28 @@ function validateServerBuild(target, build, commit, development) {
 async function main() {
   const { values } = parseArgs({ options: {
     target: { type: 'string' }, universal: { type: 'boolean', default: false },
-    development: { type: 'boolean', default: false }, out: { type: 'string' },
+    release: { type: 'boolean', default: false }, out: { type: 'string' },
   } });
-  const target = values.target;
-  const selected = selectTargets(target, values.universal);
+  const selected = selectTargets(values.target, values.universal);
+  const target = values.universal ? undefined : selected[0];
+  const development = !values.release;
   for (const platform of selected) validateBundle(platform, path.join(plugin, 'bundle', platform));
   const git = args => execFileSync('git', args, { cwd: repository, encoding: 'utf8' }).trim();
-  if (git(['status', '--porcelain']) && !values.development) {
-    throw new Error('Release packaging requires a clean Git tree. Commit changes, or use --development for a local-only test package.');
+  if (git(['status', '--porcelain']) && !development) {
+    throw new Error('Release packaging requires a clean Git tree. Commit changes, or omit --release for a local-only test package.');
   }
   const commit = git(['rev-parse', 'HEAD']);
   for (const platform of selected) {
     const executable = platform.startsWith('win32-') ? 'control-server.exe' : 'control-server';
     const build = execFileSync('go', ['version', '-m', path.join(plugin, 'bundle', platform, executable)], { encoding: 'utf8' });
-    validateServerBuild(platform, build, commit, values.development);
+    validateServerBuild(platform, build, commit, development);
   }
-  if (!process.env.npm_execpath) throw new Error('Run with npm run vsix -- --target <platform> or --universal.');
-  execFileSync(process.execPath, [process.env.npm_execpath, 'run', 'package'], { cwd: plugin, stdio: 'inherit' });
+  if (!process.env.npm_execpath) throw new Error('Run with npm run vsix.');
+  execFileSync(process.execPath, [process.env.npm_execpath, 'run', 'build', '--', '--production'], { cwd: plugin, stdio: 'inherit' });
   const manifest = JSON.parse(fs.readFileSync(path.join(plugin, 'package.json'), 'utf8'));
   if (manifest.license !== 'AGPL-3.0-only') throw new Error('Expected AGPL-3.0-only in package.json.');
   const output = path.resolve(values.out || path.join(plugin, 'releases',
-    `${manifest.name}-${manifest.version}-${values.universal ? 'universal' : target}${values.development ? '-dev' : ''}.vsix`));
+    `${manifest.name}-${manifest.version}-${values.universal ? 'universal' : target}${development ? '-dev' : ''}.vsix`));
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'valdroid-vsix-'));
   try {
     for (const name of ['README.md', 'CHANGELOG.md', 'media', 'dist/extension.js',
@@ -88,10 +90,10 @@ async function main() {
     fs.copyFileSync(path.join(repository, 'control-server/third_party/screen_sharing_service/LICENSE.txt'),
       path.join(stage, 'licenses/android-screen-sharing-agent.txt'));
     const source = `https://github.com/Vali-98/valdroid-emulator/tree/${commit}`;
-    fs.writeFileSync(path.join(stage, 'SOURCE.md'), values.development
+    fs.writeFileSync(path.join(stage, 'SOURCE.md'), development
       ? '# Development Build\n\nLocal test package. Do not redistribute: bundled artifacts may not match committed source.\n'
       : `# Corresponding Source\n\nVersion: ${manifest.version}\nCommit: ${commit}\n\n[Browse source](${source})\n\nThe included valdroid-source.tar.gz contains this release's repository, including build scripts and dependency lockfiles.\n`);
-    if (!values.development) {
+    if (!development) {
       execFileSync('git', ['archive', '--format=tar.gz', `--output=${path.join(stage, 'valdroid-source.tar.gz')}`, 'HEAD'], { cwd: repository });
     }
     delete manifest.scripts;
@@ -103,7 +105,7 @@ async function main() {
     await createVSIX({ cwd: stage, packagePath: output, target, dependencies: false,
       baseContentUrl: `https://github.com/Vali-98/valdroid-emulator/blob/${commit}/plugin/`,
       baseImagesUrl: `https://raw.githubusercontent.com/Vali-98/valdroid-emulator/${commit}/plugin/` });
-    console.log(`Created ${output}${values.development ? ' (local testing only)' : ''}`);
+    console.log(`Created ${output}${development ? ' (local testing only)' : ''}`);
   } finally {
     fs.rmSync(stage, { recursive: true, force: true });
   }

@@ -18,11 +18,17 @@ function fixture(t, target = 'darwin-arm64') {
   return root;
 }
 
-test('universal packaging selects all supported platforms without a VSIX target', () => {
-  assert.deepEqual(selectTargets(undefined, true), targets);
-  assert.deepEqual(selectTargets('win32-x64', false), ['win32-x64']);
+test('packaging defaults to the current host and permits supported CI targets', () => {
+  assert.deepEqual(selectTargets(), [`${process.platform}-${process.arch}`]);
+  for (const target of targets) assert.deepEqual(selectTargets(target), [target]);
+  assert.throws(() => selectTargets('universal'), /Unsupported target/);
+  assert.throws(() => selectTargets('web'), /Unsupported target/);
+  assert.throws(() => selectTargets('darwin-x64'), /Unsupported target/);
+});
+
+test('universal packaging includes all four supported hosts', () => {
+  assert.deepEqual(selectTargets(undefined, true), ['darwin-arm64', 'linux-arm64', 'linux-x64', 'win32-x64']);
   assert.throws(() => selectTargets('win32-x64', true), /either/);
-  assert.throws(() => selectTargets(undefined, false), /Select/);
 });
 
 test('packaging always requires an explicit supported target', t => {
@@ -52,9 +58,9 @@ function buildInfo(os = 'darwin', arch = 'arm64') {
 
 test('server targets map Node platform names to Go names', () => {
   assert.doesNotThrow(() => validateServerBuild('win32-x64', buildInfo('windows', 'amd64'), 'abc', false));
-  assert.doesNotThrow(() => validateServerBuild('darwin-x64', buildInfo('darwin', 'amd64'), 'abc', false));
+  assert.doesNotThrow(() => validateServerBuild('linux-x64', buildInfo('linux', 'amd64'), 'abc', false));
   assert.throws(() => validateServerBuild('linux-x64', buildInfo(), 'abc', true), /GOOS=linux/);
-  assert.throws(() => validateServerBuild('darwin-x64', buildInfo(), 'abc', true), /GOARCH=amd64/);
+  assert.throws(() => validateServerBuild('linux-x64', buildInfo('linux'), 'abc', true), /GOARCH=amd64/);
 });
 
 test('pure Go server builds can be packaged', () => {

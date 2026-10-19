@@ -5,7 +5,7 @@ button, input, select { font: inherit; color: inherit; }
 button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: 0 0 28px; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
 button:hover, button[aria-pressed=true] { background: var(--vscode-toolbar-hoverBackground, #ffffff18); }
 button:disabled { opacity: .35; cursor: default; }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 1px solid var(--vscode-focusBorder, #55aaff); outline-offset: -1px; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 1px solid var(--vscode-foreground, #ddd); outline-offset: -1px; }
 select, input { background: var(--vscode-input-background, #303030); border: 1px solid var(--vscode-input-border, #ffffff16); border-radius: 3px; height: 28px; min-width: 0; }
 select { padding: 0 5px; width: 170px; max-width: 100%; }
 input { padding: 0 7px; }
@@ -50,3 +50,6 @@ mark { color: inherit; background: var(--vscode-editor-findMatchHighlightBackgro
   .log-tag { width: 85px; flex-basis: 85px; }
   .console-line { gap: 8px; }
 }
+
+button[aria-pressed=true] { color: var(--valdroid-on-primary); background: var(--valdroid-primary); }
+button[aria-pressed=true]:hover { background: var(--valdroid-primary-hover); }

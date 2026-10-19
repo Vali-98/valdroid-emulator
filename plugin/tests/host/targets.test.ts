@@ -3,15 +3,17 @@ import type * as vscode from 'vscode';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { listTargets } from '../../src/host/adb/targets';
 
-const mocks = vi.hoisted(() => ({run: vi.fn()}));
+const mocks = vi.hoisted(() => ({run: vi.fn(), read: vi.fn()}));
+vi.mock('node:fs/promises', () => ({readFile: mocks.read}));
 vi.mock('../../src/host/session/process', () => ({runFile: mocks.run}));
 const output = {appendLine: vi.fn()} as unknown as vscode.OutputChannel;
-beforeEach(() => {mocks.run.mockReset();});
+beforeEach(() => {mocks.run.mockReset(); mocks.read.mockReset(); mocks.read.mockRejectedValue(new Error('Missing config'));});
 
 it('matches running emulator identities and deduplicates AVDs and serials', async () => {
 	mocks.run.mockImplementation(async (_file, args: string[]) => {
 		if (args[0] === '-list-avds') {return 'Medium_Phone_API_36\nOther_Phone\nOther_Phone\n';}
 		if (args[0] === 'devices') {return 'List of devices attached\nemulator-5554\tdevice\nemulator-5554\tdevice\nphysical\tdevice\noffline\toffline\n';}
+		if (args.includes('getprop')) {return '';}
 		return 'Medium_Phone_API_36\nOK\n';
 	});
 	expect(await listTargets('emulator', 'adb', output)).toEqual([
@@ -20,6 +22,18 @@ it('matches running emulator identities and deduplicates AVDs and serials', asyn
 		{label: 'Other_Phone', value: 'avd:Other_Phone', avdName: 'Other_Phone'},
 	]);
 	expect(mocks.run).not.toHaveBeenCalledWith('adb', ['-s', 'physical', 'emu', 'avd', 'name']);
+});
+
+it('reads running device ABIs and saved AVD architecture', async () => {
+	mocks.run.mockImplementation(async (_file, args: string[]) => {
+		if (args[0] === '-list-avds') {return 'SavedPhone\n';}
+		if (args[0] === 'devices') {return 'List of devices attached\nphysical\tdevice\n';}
+		if (args.includes('getprop')) {return 'arm64-v8a\n';}
+		throw new Error('Unexpected command');
+	});
+	mocks.read.mockImplementation(async (file: string) => file.endsWith('config.ini') ? 'abi.type=x86_64\n' : '');
+	const targets = await listTargets('emulator', 'adb', output);
+	expect(targets.map(target => target.abi)).toEqual(['arm64-v8a', 'x86_64']);
 });
 
 it('keeps startup options when the running emulator identity is unavailable', async () => {

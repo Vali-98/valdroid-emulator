@@ -1,8 +1,22 @@
 import type * as vscode from 'vscode';
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import * as path from 'node:path';
 import { runFile } from '../session/process';
 import type { EmulatorTarget } from '../../shared/protocol';
 
 export interface RunningDevice { serial: string; avdName?: string; }
+
+async function avdAbi(name: string): Promise<string | undefined> {
+	const androidHome = process.env.ANDROID_USER_HOME || process.env.ANDROID_EMULATOR_HOME || path.join(homedir(), '.android');
+	const avdHome = process.env.ANDROID_AVD_HOME || path.join(androidHome, 'avd');
+	try {
+		const ini = await readFile(path.join(avdHome, `${name}.ini`), 'utf8').catch(() => '');
+		const directory = /^path\s*=\s*(.+)$/m.exec(ini)?.[1]?.trim() || path.join(avdHome, `${name}.avd`);
+		const config = await readFile(path.join(directory, 'config.ini'), 'utf8');
+		return /^abi\.type\s*=\s*(.+)$/m.exec(config)?.[1]?.trim();
+	} catch {return undefined;}
+}
 
 export async function listRunningDevices(adbPath: string, signal?: AbortSignal): Promise<RunningDevice[]> {
 	const output = await runFile(adbPath, ['devices'], signal ? {signal} : undefined);
@@ -28,9 +42,15 @@ export async function listTargets(emulatorPath: string, adbPath: string, output:
 	const running = devices.status === 'fulfilled' ? devices.value : [];
 	const runningNames = new Set(running.map(device => device.avdName).filter(Boolean));
 	const available = avds.status === 'fulfilled' ? [...new Set(avds.value.split(/\r?\n/).map(name => name.trim()).filter(Boolean))] : [];
-	return [
+	const targets: EmulatorTarget[] = [
 		...running.map(device => ({label: device.avdName ? `${device.avdName} (${device.serial})` : device.serial,
 			value: `device:${device.serial}`, avdName: device.avdName})),
 		...available.filter(name => !runningNames.has(name)).map(name => ({label: name, value: `avd:${name}`, avdName: name})),
 	];
+	return Promise.all(targets.map(async target => {
+		const abi = target.value.startsWith('device:')
+			? await runFile(adbPath, ['-s', target.value.slice(7), 'shell', 'getprop', 'ro.product.cpu.abi']).then(value => value.trim()).catch(() => undefined)
+			: target.avdName ? await avdAbi(target.avdName) : undefined;
+		return abi ? {...target, abi} : target;
+	}));
 }

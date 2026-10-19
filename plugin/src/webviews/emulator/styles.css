@@ -54,7 +54,7 @@
 	}
 	.device-pill.loaded {
 		color: var(--vscode-foreground);
-		border-color: var(--vscode-focusBorder);
+		border-color: var(--valdroid-primary);
 	}
 	select,
 	button {
@@ -71,13 +71,13 @@
 		padding: 0 10px;
 	}
 	button {
-		color: var(--vscode-button-foreground);
-		background: var(--vscode-button-background);
+		color: var(--valdroid-on-primary);
+		background: var(--valdroid-primary);
 		border: 1px solid var(--vscode-button-border, transparent);
 		cursor: pointer;
 	}
 	button:hover:not(:disabled) {
-		background: var(--vscode-button-hoverBackground);
+		background: var(--valdroid-primary-hover);
 	}
 	button:disabled,
 	select:disabled {
@@ -187,7 +187,7 @@
 		inset: 4px;
 		display: grid;
 		place-items: center;
-		border: 2px dashed var(--vscode-focusBorder);
+		border: 2px dashed var(--valdroid-primary);
 		border-radius: 8px;
 		background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
 		pointer-events: none;
@@ -260,10 +260,10 @@
 	}
 	.transfer-bar > div {
 		height: 100%;
-		background: var(--vscode-button-background);
+		background: var(--valdroid-primary);
 		transition: width 120ms linear;
 	}
-	.transfer-toast.complete .transfer-bar > div { background: var(--vscode-testing-iconPassed, var(--vscode-button-background)); }
+	.transfer-toast.complete .transfer-bar > div { background: var(--vscode-testing-iconPassed, var(--valdroid-primary)); }
 	.transfer-time { color: var(--vscode-descriptionForeground); font-size: 10px; }
 	.transfer-spinner { animation: spin 0.9s linear infinite; }
 	.empty {
@@ -328,10 +328,10 @@
 	}
 	.loading { padding: 16px; }
 	.loading-bar { width: min(180px, 100%); height: 4px; overflow: hidden; border-radius: 999px; background: #303030; }
-	.loading-bar > div { width: 50%; height: 100%; background: linear-gradient(90deg, transparent, #fff, transparent); animation: loading-shimmer 1.4s ease-in-out infinite; }
+	.loading-bar > div { width: 50%; height: 100%; background: linear-gradient(90deg, transparent, var(--valdroid-primary), transparent); animation: loading-shimmer 1.4s ease-in-out infinite; }
 	.loading-retry { color: #fff; border: 0; background: transparent; padding: 0; text-decoration: underline; font-size: 11px; }
 	.loading-retry:hover:not(:disabled) { background: transparent; color: #fff; }
-	.loading-retry:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 4px; }
+	.loading-retry:focus-visible { outline: 1px solid var(--vscode-foreground, #ddd); outline-offset: 4px; }
 	@keyframes loading-shimmer { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 	.loading-status,
 	.error-message,
@@ -380,27 +380,27 @@
 		color: #fff;
 		background-color: #080808;
 		border: 1px solid #3a3a3a;
-		transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+		transition: background-color 120ms ease;
 	}
 	.device-picker select {
 		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+		transition: none;
+		outline: none;
+		box-shadow: none;
 		background-position: right 14px center;
 		background-repeat: no-repeat;
 		text-overflow: ellipsis;
 	}
-	.device-picker select:hover:not(:disabled),
-	.device-picker .play-button:hover:not(:disabled) {
-		background-color: #2b2b2b;
-		border-color: #777;
-		box-shadow: 0 0 0 1px rgb(255 255 255 / 12%);
-	}
-	.device-picker select:focus-visible,
-	.device-picker .play-button:focus-visible,
 	.device-rail button:focus-visible {
-		outline: 2px solid var(--vscode-focusBorder, #8ab4f8);
+		outline: 2px solid var(--vscode-foreground, #ddd);
 		outline-offset: 2px;
 	}
 	.device-picker option {
 		color: #fff;
 		background: #080808;
 	}
+
+.device-picker .play-button:hover:not(:disabled) { background-color: #2b2b2b; }
+.device-picker .play-button:focus { outline: none; box-shadow: none; }
+.debug-button[aria-pressed="true"] { color: var(--valdroid-on-primary); background: var(--valdroid-primary); }
+button:focus-visible { outline: 2px solid var(--vscode-foreground, #ddd); outline-offset: 2px; }

@@ -4,6 +4,9 @@ Stream and control Android emulators inside VS Code, with audio, device controls
 drag-and-drop APK installation and file transfers to Downloads, and a synchronized
 ADB/logcat console.
 
+Supported platforms: **Windows x64**, **Linux x64/ARM64**, and **macOS on Apple Silicon**.
+Intel Macs and Windows ARM64 are not supported.
+
 - [Features and setup](plugin/README.md)
 - [Development and architecture](docs/DEVELOPMENT.md)
 - [Server builds](control-server/README.md#building-the-host-server)
@@ -15,11 +18,11 @@ ADB/logcat console.
 
 Install Node.js 22 or newer, Go, and the Android SDK
 and JDK described in the server build guide. In `control-server`, run
-`make plugin-bundle`. In `plugin`, run `npm ci`, then `npm run compile`
+`make`. In `plugin`, run `npm ci`, then `npm run build`
 and launch the Extension Development Host.
 
-Bundles use VS Code platform names such as `darwin-arm64`, `darwin-x64`,
-`win32-x64`, and `linux-x64`, not Go's `windows`/`amd64` names.
+Bundles use VS Code platform names such as `darwin-arm64`,
+`win32-x64`, and `linux-x64`.
 
 ## License
 

@@ -7,12 +7,12 @@ Requires Node.js 22+, Go, and Android build tools for native bundles.
 ```sh
 cd plugin
 npm ci
-npm run compile
+npm run build
 npm test
 npm run test:packaging
 ```
 
-Use `npm run watch` while editing and reload the Extension Development Host.
+Run `npm run build` after edits and reload the Extension Development Host.
 Run `make test` in `control-server` for Go race tests and vet.
 See [releasing](RELEASING.md) for native bundles and VSIX packaging.
 
