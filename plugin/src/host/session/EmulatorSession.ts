@@ -65,7 +65,7 @@ export class EmulatorSession {
 		if (existing) {return existing.serial;}
 		signal.throwIfAborted();
 		this.output.appendLine(`Starting AVD ${avd}`);
-		this.emulatorProcess = spawn(this.emulatorPath, ['-avd', avd, '-no-window', '-gpu', 'host'], { stdio: 'ignore' });
+		this.emulatorProcess = spawn(this.emulatorPath, ['-avd', avd, '-no-window', '-gpu', 'host'], { stdio: 'ignore', windowsHide: true });
 		const child = this.emulatorProcess;
 		let launchError: Error | undefined;
 		child.on('error', error => {launchError = error; this.output.appendLine(`Emulator process error: ${error.message}`);});
@@ -106,7 +106,7 @@ export class EmulatorSession {
 			'--device-serial', serial,
 			'--adb', this.adbPath,
 			'--bit-rate', String(this.bitRate),
-		], { cwd: bundleDir, stdio: 'pipe' });
+		], { cwd: bundleDir, stdio: 'pipe', windowsHide: true });
 		const child = this.serverProcess;
 		let connected = false;
 		this.activeSerial = serial;

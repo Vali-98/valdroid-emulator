@@ -87,7 +87,7 @@ export class AdbConsole {
 	}
 	private startLogcat(): void {
 		if (!this.state.serial || this.logcat || this.disposed) { return; }
-		const child = spawn(this.adbPath, ['-s', this.state.serial, 'logcat', '-v', 'threadtime', '-T', '200', '*:V'], { stdio: ['ignore', 'pipe', 'pipe'] });
+		const child = spawn(this.adbPath, ['-s', this.state.serial, 'logcat', '-v', 'threadtime', '-T', '200', '*:V'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 		this.logcat = child;
 		this.state = { ...this.state, streaming: true }; this.postState();
 		this.stream(child, (line, error) => {
@@ -115,7 +115,7 @@ export class AdbConsole {
 			if (this.command) { throw new Error('An ADB command is already running'); }
 			const args = adbArguments(command);
 			this.append({ id: ++this.id, kind: 'command', level: 'I', time: '', text: `adb ${command.replace(/^adb\s+/, '')}` });
-			const child = spawn(this.adbPath, ['-s', this.state.serial, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+			const child = spawn(this.adbPath, ['-s', this.state.serial, ...args], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 			this.command = child; this.state = { ...this.state, busy: true }; this.postState();
 			this.stream(child, (text, error) => {
 				if (this.command === child) { this.append({ id: ++this.id, kind: error ? 'error' : 'output', level: error ? 'E' : 'I', time: '', text }); }

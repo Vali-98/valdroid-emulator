@@ -46,7 +46,7 @@ func Run() {
 	shutdownContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 	server := &http.Server{
-		Handler:           mux,
+		Handler:           allowWebviewRequests(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		BaseContext: func(net.Listener) context.Context {
 			return shutdownContext

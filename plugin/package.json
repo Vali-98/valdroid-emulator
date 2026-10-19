@@ -84,10 +84,12 @@
           "id": "valdroidConsole",
           "title": "Valdroid",
           "icon": "media/android.svg"
-        },
+        }
+      ], 
+      "secondarySidebar": [
         {
           "id": "valdroidEmulator",
-          "title": "Android Emulator",
+          "title": "Valdroid Emulator",
           "icon": "media/android.svg"
         }
       ]
@@ -103,7 +105,7 @@
       "valdroidEmulator": [
         {
           "id": "valdroidEmulator.view",
-          "name": "Emulator",
+          "name": "Valdroid Emulator",
           "type": "webview"
         }
       ]

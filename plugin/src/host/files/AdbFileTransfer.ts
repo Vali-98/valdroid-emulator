@@ -18,7 +18,7 @@ export class AdbFileTransfer {
 		const args = apk ? ['install', '-r', '-t', file] : ['push', file, destination];
 		this.output.appendLine(apk ? `Installing ${name} on ${serial}` : `Sending ${name} to ${serial}:${destination}`);
 		await new Promise<void>((resolve, reject) => {
-			const child = spawn(this.adbPath, ['-s', serial, ...args], { signal, stdio: ['ignore', 'pipe', 'pipe'] });
+			const child = spawn(this.adbPath, ['-s', serial, ...args], { signal, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 			let details = '';
 			const timer = setTimeout(() => {child.kill(); reject(new Error(apk ? 'ADB installation timed out' : 'ADB file transfer timed out'));}, 15 * 60 * 1000);
 			const receive = (data: Buffer) => {

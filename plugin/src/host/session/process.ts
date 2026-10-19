@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile);
 
 export async function runFile(file: string, args: string[], options: {signal?: AbortSignal; timeout?: number} = {}): Promise<string> {
 	try {
-		const { stdout } = await execFileAsync(file, args, { encoding: 'utf8', timeout: options.timeout ?? 15000, signal: options.signal });
+		const { stdout } = await execFileAsync(file, args, { encoding: 'utf8', timeout: options.timeout ?? 15000, signal: options.signal, windowsHide: true });
 		return stdout;
 	} catch (error) {
 		const failure = error as Error & { stderr?: string };

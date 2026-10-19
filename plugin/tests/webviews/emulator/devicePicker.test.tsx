@@ -14,3 +14,16 @@ it('marks running devices in a flat list and describes the selected action', () 
 	rerender(<DevicePicker {...props} selected="avd:Other" />);
 	expect(screen.getByRole('button', {name: 'Start emulator'})).toBeTruthy();
 });
+
+it('refreshes connected devices automatically and stops refreshing after unmount', () => {
+	vi.useFakeTimers();
+	try {
+		const onRefresh = vi.fn();
+		const {unmount} = render(<DevicePicker targets={[]} selected="" onSelect={vi.fn()} onRefresh={onRefresh} onStart={vi.fn()} />);
+		vi.advanceTimersByTime(6000);
+		expect(onRefresh).toHaveBeenCalledTimes(2);
+		unmount();
+		vi.advanceTimersByTime(3000);
+		expect(onRefresh).toHaveBeenCalledTimes(2);
+	} finally {vi.useRealTimers();}
+});

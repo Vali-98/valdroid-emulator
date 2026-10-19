@@ -46,7 +46,7 @@ export function useHostSession() {
 	return {
 		...state,
 		selectTarget: (value: string) => dispatch({ type: 'select', value }),
-		refreshTargets: () => vscode.postMessage({ type: 'refresh' }),
+		refreshTargets: React.useCallback(() => vscode.postMessage({ type: 'refresh' }), []),
 		start: () => {if (state.selectedTarget) {vscode.postMessage({ type: 'start', value: state.selectedTarget });}},
 		close: () => vscode.postMessage({ type: 'close' }),
 		retry: () => vscode.postMessage({type: 'retry'}),

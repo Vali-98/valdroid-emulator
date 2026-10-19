@@ -10,6 +10,10 @@ export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, 
 	onStart: () => void;
 	error?: string;
 }) {
+	React.useEffect(() => {
+		const timer = window.setInterval(onRefresh, 3000);
+		return () => window.clearInterval(timer);
+	}, [onRefresh]);
 	const action = selected.startsWith('device:') ? 'Connect to device' : 'Start emulator';
 	return <div className="empty">
 		<div className="device-picker">
