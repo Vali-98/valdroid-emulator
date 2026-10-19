@@ -2,7 +2,7 @@
   "name": "valdroid-emulator",
   "displayName": "Valdroid Emulator",
   "description": "Android emulator and logcat inside VS Code.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "Vali-98",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -85,7 +85,7 @@
           "title": "Valdroid",
           "icon": "media/android.svg"
         }
-      ], 
+      ],
       "secondarySidebar": [
         {
           "id": "valdroidEmulator",
