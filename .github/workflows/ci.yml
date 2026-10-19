@@ -16,6 +16,8 @@ env:
 
 jobs:
   control-server:
+    # The tag run tests release commits; avoid repeating them on the branch push.
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') || !contains(github.event.head_commit.message, '[release]')
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -30,6 +32,7 @@ jobs:
       - run: go vet ./...
 
   plugin:
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') || !contains(github.event.head_commit.message, '[release]')
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +82,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          # Override the action's default, which includes the unavailable legacy 'tools' package.
+          packages: platform-tools
       - name: Install the agent's Android toolchain
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'cmake;3.22.1' 'ndk;28.2.13676358'
       - name: Build an isolated copy of the Android agent

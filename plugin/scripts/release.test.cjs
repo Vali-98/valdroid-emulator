@@ -37,7 +37,7 @@ for (const [bump, version] of [['patch', '1.2.4'], ['minor', '1.3.0'], ['major',
     assert.equal(f.read('package-lock.json').version, version);
     assert.equal(f.read('package-lock.json').packages[''].version, version);
     assert.equal(f.git(['status', '--porcelain']), '');
-    assert.equal(f.git(['log', '-1', '--format=%s']), `Release v${version}`);
+    assert.equal(f.git(['log', '-1', '--format=%s']), `Release v${version} [release]`);
     assert.equal(f.git(['rev-parse', `v${version}^{commit}`]), f.git(['rev-parse', 'HEAD']));
     assert.equal(f.git(['cat-file', '-t', `v${version}`]), 'tag');
   });

@@ -37,7 +37,7 @@ async function release(bump, { cwd = path.resolve(__dirname, '..'), confirmPush 
   }
 
   git(['add', '--', ...files]);
-  git(['commit', '-m', `Release ${tag}`, '--', ...files], { stdio: 'inherit' });
+  git(['commit', '-m', `Release ${tag} [release]`, '--', ...files], { stdio: 'inherit' });
   git(['tag', '-a', tag, '-m', `Release ${tag}`]);
   console.log(`Created release commit and tag ${tag}.`);
 
