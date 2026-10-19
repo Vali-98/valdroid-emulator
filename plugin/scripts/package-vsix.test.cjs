@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { abis, validateBundle, validateServerBuild } = require('./package-vsix.cjs');
+const { targets, abis, selectTargets, validateBundle, validateServerBuild } = require('./package-vsix.cjs');
 const { dependencyNotices } = require('./third-party.cjs');
 
 function fixture(t, target = 'darwin-arm64') {
@@ -17,6 +17,13 @@ function fixture(t, target = 'darwin-arm64') {
   }
   return root;
 }
+
+test('universal packaging selects all supported platforms without a VSIX target', () => {
+  assert.deepEqual(selectTargets(undefined, true), targets);
+  assert.deepEqual(selectTargets('win32-x64', false), ['win32-x64']);
+  assert.throws(() => selectTargets('win32-x64', true), /either/);
+  assert.throws(() => selectTargets(undefined, false), /Select/);
+});
 
 test('packaging always requires an explicit supported target', t => {
   const root = fixture(t);

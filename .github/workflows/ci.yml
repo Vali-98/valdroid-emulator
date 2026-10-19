@@ -174,9 +174,73 @@ jobs:
           path: plugin/releases/*.vsix
           if-no-files-found: error
           retention-days: 7
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server-${{ matrix.target }}
+          path: plugin/bundle/${{ matrix.target }}/${{ matrix.executable }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release-universal:
+    needs: release-packages
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: control-server/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: server-*
+          path: ${{ runner.temp }}/valdroid-servers
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-agent
+          path: ${{ runner.temp }}/valdroid-agent-bundle
+      - name: Assemble all platform bundles
+        run: |
+          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-x64; do
+            bundle="plugin/bundle/$target"
+            mkdir -p "$bundle"
+            cp -a "$RUNNER_TEMP/valdroid-servers/server-$target/." "$bundle/"
+            cp -a "$RUNNER_TEMP/valdroid-agent-bundle/." "$bundle/"
+          done
+      - run: npm ci
+        working-directory: plugin
+      - name: Package the universal release VSIX
+        working-directory: plugin
+        run: npm run vsix -- --universal
+      - name: Verify universal executable permissions and report size
+        working-directory: plugin
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          package, = Path('releases').glob('*-universal.vsix')
+          with ZipFile(package) as archive:
+              assert b'TargetPlatform=' not in archive.read('extension.vsixmanifest')
+              servers = [entry for entry in archive.infolist() if entry.filename.endswith('/control-server')]
+              assert len(servers) == 4, 'Expected all four Unix server binaries'
+              for entry in servers:
+                  assert (entry.external_attr >> 16) & 0o111, f'Missing executable permissions: {entry.filename}'
+          print(f'{package.name}: {package.stat().st_size:,} bytes ({package.stat().st_size / 1024**2:.2f} MiB)')
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vsix-universal
+          path: plugin/releases/*-universal.vsix
+          if-no-files-found: error
+          retention-days: 7
 
   release:
-    needs: release-packages
+    needs: [release-packages, release-universal]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -12,8 +12,8 @@ Use `patch`, `minor`, or `major`. The script bumps the manifest and lockfile,
 commits them, creates a `v` tag, and prompts before pushing the branch and tag
 to `origin`. Declining keeps the release local. A clean working tree is required.
 
-[CI](../.github/workflows/ci.yml) runs tests, builds the Android agent and five
-platform VSIX packages, then uploads them with checksums and release notes.
+[CI](../.github/workflows/ci.yml) runs tests, builds five platform VSIX packages
+and one universal VSIX, then uploads them with checksums and release notes.
 Beta tags such as `v0.2.0-beta.1` create prereleases. Existing releases are not
 overwritten. Branch pushes, pull requests, and manual runs only perform checks.
 
@@ -30,6 +30,9 @@ npm ci
 npm run vsix -- --target win32-x64 --development
 ```
 
+CI also builds a universal VSIX on Linux, preserving Unix executable permissions,
+and reports its size in the build log.
+
 Install the file from `plugin/releases` using **Extensions: Install from VSIX?**.
 Do not publish `*-dev.vsix`. Release packaging requires a clean commit and a
 matching native build; omit `--development`. Use the helper rather than bare vsce.
@@ -42,5 +45,5 @@ matching native build; omit `--development`. Use the helper rather than bare vsc
 - Keep pinned toolchains aligned with the runtime notices. CI does not sign
   native binaries or verify their behavior on each target OS.
 
-Marketplace publishing is separate and is not automated. Publish the tested
-platform VSIX files at the same version using [vsce](https://github.com/microsoft/vscode-vsce#trusted-publishing).
+Marketplace publishing is separate. Upload the universal VSIX through the web UI,
+or publish platform packages using [vsce](https://github.com/microsoft/vscode-vsce#trusted-publishing).

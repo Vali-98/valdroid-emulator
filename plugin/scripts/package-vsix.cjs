@@ -10,6 +10,13 @@ const repository = path.resolve(plugin, '..');
 const targets = ['darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64', 'win32-x64'];
 const abis = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'];
 
+function selectTargets(target, universal) {
+  if (universal && target) throw new Error('Use either --universal or --target, not both.');
+  if (universal) return targets;
+  if (!targets.includes(target)) throw new Error(`Select --universal or an explicit supported --target: ${targets.join(', ')}`);
+  return [target];
+}
+
 function validateBundle(target, bundle) {
   if (!targets.includes(target)) throw new Error(`Select an explicit supported --target: ${targets.join(', ')}`);
   const required = [
@@ -40,25 +47,28 @@ function validateServerBuild(target, build, commit, development) {
 
 async function main() {
   const { values } = parseArgs({ options: {
-    target: { type: 'string' }, development: { type: 'boolean', default: false }, out: { type: 'string' },
+    target: { type: 'string' }, universal: { type: 'boolean', default: false },
+    development: { type: 'boolean', default: false }, out: { type: 'string' },
   } });
   const target = values.target;
-  const sourceBundle = path.join(plugin, 'bundle', target || '');
-  validateBundle(target, sourceBundle);
+  const selected = selectTargets(target, values.universal);
+  for (const platform of selected) validateBundle(platform, path.join(plugin, 'bundle', platform));
   const git = args => execFileSync('git', args, { cwd: repository, encoding: 'utf8' }).trim();
   if (git(['status', '--porcelain']) && !values.development) {
     throw new Error('Release packaging requires a clean Git tree. Commit changes, or use --development for a local-only test package.');
   }
   const commit = git(['rev-parse', 'HEAD']);
-  const executable = target.startsWith('win32-') ? 'control-server.exe' : 'control-server';
-  const build = execFileSync('go', ['version', '-m', path.join(sourceBundle, executable)], { encoding: 'utf8' });
-  validateServerBuild(target, build, commit, values.development);
-  if (!process.env.npm_execpath) throw new Error('Run this helper with npm run vsix -- --target <platform>.');
+  for (const platform of selected) {
+    const executable = platform.startsWith('win32-') ? 'control-server.exe' : 'control-server';
+    const build = execFileSync('go', ['version', '-m', path.join(plugin, 'bundle', platform, executable)], { encoding: 'utf8' });
+    validateServerBuild(platform, build, commit, values.development);
+  }
+  if (!process.env.npm_execpath) throw new Error('Run with npm run vsix -- --target <platform> or --universal.');
   execFileSync(process.execPath, [process.env.npm_execpath, 'run', 'package'], { cwd: plugin, stdio: 'inherit' });
   const manifest = JSON.parse(fs.readFileSync(path.join(plugin, 'package.json'), 'utf8'));
   if (manifest.license !== 'AGPL-3.0-only') throw new Error('Expected AGPL-3.0-only in package.json.');
   const output = path.resolve(values.out || path.join(plugin, 'releases',
-    `${manifest.name}-${manifest.version}-${target}${values.development ? '-dev' : ''}.vsix`));
+    `${manifest.name}-${manifest.version}-${values.universal ? 'universal' : target}${values.development ? '-dev' : ''}.vsix`));
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'valdroid-vsix-'));
   try {
     for (const name of ['README.md', 'CHANGELOG.md', 'media', 'dist/extension.js',
@@ -67,9 +77,11 @@ async function main() {
       fs.mkdirSync(path.dirname(path.join(stage, name)), { recursive: true });
       fs.cpSync(path.join(plugin, name), path.join(stage, name), { recursive: true });
     }
-    const bundle = path.join(stage, 'bundle', target);
-    fs.cpSync(sourceBundle, bundle, { recursive: true });
-    if (!target.startsWith('win32-')) fs.chmodSync(path.join(bundle, executable), 0o755);
+    for (const platform of selected) {
+      const bundle = path.join(stage, 'bundle', platform);
+      fs.cpSync(path.join(plugin, 'bundle', platform), bundle, { recursive: true });
+      if (!platform.startsWith('win32-')) fs.chmodSync(path.join(bundle, 'control-server'), 0o755);
+    }
     for (const name of ['LICENSE', 'NOTICE', 'licenses']) {
       fs.cpSync(path.join(repository, name), path.join(stage, name), { recursive: true });
     }
@@ -97,5 +109,5 @@ async function main() {
   }
 }
 
-module.exports = { targets, abis, validateBundle, validateServerBuild };
+module.exports = { targets, abis, selectTargets, validateBundle, validateServerBuild };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });
