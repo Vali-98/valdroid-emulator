@@ -19,7 +19,7 @@ it('measures Fabric views, batches pixel coordinates and stops posting when disa
 			Dimensions: {get: () => ({width: 400, height: 800})}, PixelRatio: {get: () => 2}, Platform: {OS: 'android'}, StatusBar: {currentHeight: 24},
 		} : {ReactScanInternals: {}, createInstrumentation: (_id: string, config: {onRender: typeof render}) => {render = config.onRender; return {isPaused: paused};}},
 		setInterval: (callback: () => Promise<void>) => {flush = callback;},
-		setTimeout: (callback: () => Promise<void>, milliseconds: number) => {if (milliseconds === 750) {poll = callback;} return 1;},
+		setTimeout: (callback: () => Promise<void>) => {if (callback.name === 'poll') {poll = callback;} return 1;},
 		clearTimeout() {},
 		fetch: async (_url: string, options?: {body: string}) => {if (options) {batches.push(JSON.parse(options.body));} return {json: async () => ({enabled})};},
 	};
