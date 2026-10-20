@@ -413,8 +413,9 @@ button:focus-visible { outline: 2px solid var(--vscode-foreground, #ddd); outlin
  .devtools-menu summary::-webkit-details-marker { display: none; }
  .devtools-menu summary:hover, .devtools-menu[open] summary { background: var(--vscode-toolbar-hoverBackground); }
  .devtools-menu summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
- .devtools-popup { position: absolute; right: 0; top: 100%; z-index: 100; width: 210px; padding: 12px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px; box-shadow: 0 4px 16px #0006; }
+ .devtools-popup { position: absolute; right: 0; top: 100%; z-index: 100; width: 210px; padding: 4px 12px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px; box-shadow: 0 4px 16px #0006; }
  .devtools-popup label { display: flex; justify-content: space-between; align-items: center; }
+ .devtools-popup .toggle-switch { min-height: 30px; padding: 0; }
  .toggle-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; font-size: 15px; cursor: pointer; }
  .toggle-switch-control { position: relative; display: inline-flex; width: 44px; height: 26px; flex: 0 0 44px; }
  .toggle-switch-control input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
