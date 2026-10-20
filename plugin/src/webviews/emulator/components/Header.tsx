@@ -25,16 +25,16 @@ export function Header({ title, loaded, debugVisible = false, onToggleDebug, onC
 		<div className="topbar-spacer" />
 		<div className={`device-pill ${loaded ? 'loaded' : ''}`}>{title}</div>
 		<div className="topbar-actions">
-			{loaded && <details className="devtools-menu lifecycle-menu"><summary aria-label="App lifecycle" title="App lifecycle"><RotateCw size={16} /></summary><div className="devtools-popup">
+			{loaded && <details className="devtools-menu lifecycle-menu"><summary aria-label="App lifecycle"><RotateCw size={16} /></summary><div className="devtools-popup">
 				<button type="button" disabled={busy} onClick={event => {event.currentTarget.closest('details')?.removeAttribute('open'); onLifecycle?.('reconnect-device');}}>Reconnect device</button>
 				{devtools?.active && ([['reload', 'Reload JS'], ['restart-app', 'Restart app'], ['restart-metro', 'Restart Metro'], ['clear-metro', 'Clear Metro cache'], ['reinstall', 'Reinstall app'], ['rebuild', 'Rebuild app'], ['clean-rebuild', 'Clean rebuild']] as [LifecycleAction, string][]).map(([action, label]) => <button type="button" key={action} disabled={busy} onClick={event => {event.currentTarget.closest('details')?.removeAttribute('open'); onLifecycle?.(action);}}>{label}</button>)}
 			</div></details>}
 			{loaded && devtools?.active && <InspectorButton selected={inspecting} onClick={() => onToggleInspector?.()} />}
-			{loaded && <details className="devtools-menu"><summary aria-label="Devtools" title="Devtools"><Wrench size={16} aria-hidden="true" /></summary><div className="devtools-popup">
+			{loaded && <details className="devtools-menu"><summary aria-label="Devtools"><Wrench size={16} aria-hidden="true" /></summary><div className="devtools-popup">
 				<Switch label="Valdroid debug" checked={debugVisible} onChange={() => onToggleDebug?.()} />
 				{devtools?.active && <Switch label="Enable debugging" checked={devtools.debugger?.enabled ?? true} disabled={busy || devtools.debugger?.busy} onChange={enabled => onDebuggingChange?.(enabled)} />}
 				{devtools?.active && <Switch label="React Scan" checked={devtools.enabled} onChange={enabled => onToggleScan?.(enabled)} />}
-				{devtools?.active && <button type="button" className="devtools-action" disabled={busy} onClick={event => {event.currentTarget.closest('details')?.removeAttribute('open'); onShowDevMenu?.();}}>Show dev menu</button>}
+				{devtools?.active && <button type="button" className="devtools-action" disabled={busy} onClick={event => {event.currentTarget.closest('details')?.removeAttribute('open'); onShowDevMenu?.();}}>Open Dev Menu</button>}
 			</div></details>}
 			{loaded && deviceTools && onDeviceAction && <CaptureControls state={{...deviceTools, busy: deviceTools.busy || busy}} onAction={onDeviceAction} />}
 			<button type="button" className="close-button" disabled={!loaded} onClick={onClose} aria-label="Close emulator" title="Close emulator"><X size={18} /></button>

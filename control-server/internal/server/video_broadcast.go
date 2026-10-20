@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/binary"
 	"log"
 	"sync"
@@ -22,24 +23,34 @@ type avcClient struct {
 var avcMu sync.Mutex
 var avcClients = make(map[*avcClient]bool)
 
+const avcBootstrapFrames = 96
+const avcBootstrapBytes = 12 * 1024 * 1024
+
+type avcBootstrap struct {
+	samples []avcSample
+	bytes   int
+}
+
+var avcBootstraps = make(map[int32]avcBootstrap)
+
+func subscribeAVC(display int32) *avcClient {
+	avcMu.Lock()
+	defer avcMu.Unlock()
+	bootstrap := avcBootstraps[display]
+	client := &avcClient{display: display, samples: make(chan avcSample, len(bootstrap.samples)+8)}
+	for _, sample := range bootstrap.samples {
+		client.samples <- sample
+	}
+	avcClients[client] = true
+	return client
+}
+
 // Build one immutable Annex-B packet for every viewer of this display.
 // Parser parameter sets are replaced on changes, never mutated in place.
 func publishAVC(header videoPacketHeader, parser *avcStreamParser, nalus [][]byte) {
 	displayStateMu.Lock()
-	displayStates[header.displayID] = displayState{header.displayID, header.displayWidth, header.displayHeight, header.orientation}
+	displayStates[header.displayID] = displayState{header.displayID, header.displayWidth, header.displayHeight, header.orientation, header.orientationFix}
 	displayStateMu.Unlock()
-	avcMu.Lock()
-	interested := false
-	for client := range avcClients {
-		if client.display == header.displayID {
-			interested = true
-			break
-		}
-	}
-	avcMu.Unlock()
-	if !interested {
-		return
-	}
 	sample := avcSample{header: header, sps: parser.sps, pps: parser.pps, receivedAt: time.Now()}
 	size := 32
 	for _, nalu := range nalus {
@@ -69,6 +80,28 @@ func publishAVC(header videoPacketHeader, parser *avcStreamParser, nalus [][]byt
 	}
 	avcMu.Lock()
 	defer avcMu.Unlock()
+	bootstrap := avcBootstraps[header.displayID]
+	if len(bootstrap.samples) > 0 {
+		last := bootstrap.samples[len(bootstrap.samples)-1]
+		if !bytes.Equal(last.sps, sample.sps) || !bytes.Equal(last.pps, sample.pps) || last.header.displayWidth != header.displayWidth || last.header.displayHeight != header.displayHeight || last.header.orientation != header.orientation || last.header.orientationFix != header.orientationFix {
+			bootstrap = avcBootstrap{}
+		}
+	}
+	if sample.key {
+		bootstrap = avcBootstrap{}
+	}
+	if sample.key || len(bootstrap.samples) > 0 {
+		if len(bootstrap.samples) < avcBootstrapFrames && bootstrap.bytes+len(sample.packet) <= avcBootstrapBytes && len(sample.sps) >= 4 && len(sample.pps) > 0 {
+			bootstrap.samples = append(bootstrap.samples, sample)
+			bootstrap.bytes += len(sample.packet)
+		} else {
+			bootstrap = avcBootstrap{}
+		} // Never seed an incomplete reference chain.
+	}
+	_, cached := avcBootstraps[header.displayID]
+	if len(avcBootstraps) < 8 || cached {
+		avcBootstraps[header.displayID] = bootstrap
+	}
 	for client := range avcClients {
 		if client.display != header.displayID {
 			continue
@@ -95,6 +128,7 @@ func forwardNAL(nalu []byte) bool {
 func closeAVCClients() {
 	avcMu.Lock()
 	defer avcMu.Unlock()
+	avcBootstraps = make(map[int32]avcBootstrap)
 	for client := range avcClients {
 		close(client.samples)
 		delete(avcClients, client)

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/binary"
 	"net/http"
 	"net/http/httptest"
@@ -84,6 +85,15 @@ func TestParseAVCDecoderConfigurationRecord(t *testing.T) {
 }
 
 func TestEncodeInputCommand(t *testing.T) {
+	for orientation := int32(0); orientation < 4; orientation++ {
+		message, err := encodeInputCommand(inputCommand{Type: "orientation", Orientation: orientation})
+		if err != nil || !bytes.Equal(message, []byte{4, byte(orientation)}) {
+			t.Fatalf("unexpected orientation command %d: %x, %v", orientation, message, err)
+		}
+	}
+	if _, err := encodeInputCommand(inputCommand{Type: "orientation", Orientation: 4}); err == nil {
+		t.Fatal("accepted invalid orientation")
+	}
 	motion, err := encodeInputCommand(inputCommand{
 		Type: "motion",
 		Pointers: []motionPointer{{

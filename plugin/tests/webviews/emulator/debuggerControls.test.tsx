@@ -26,7 +26,7 @@ it('offers resume, step over and console inside the paused screen panel', () => 
 it('offers Show dev menu as an action button that closes the dropdown', () => {
 	const show = vi.fn();
 	const view = render(<Header title="Phone" loaded devtools={{type: 'devtools', active: true, enabled: false, connected: true}} onShowDevMenu={show} />);
-	const button = view.getByRole('button', {name: 'Show dev menu', hidden: true});
+	const button = view.getByRole('button', {name: 'Open Dev Menu', hidden: true});
 	const menu = button.closest('details')!;
 	menu.open = true;
 	fireEvent.click(button);

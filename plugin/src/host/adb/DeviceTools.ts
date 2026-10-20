@@ -33,11 +33,6 @@ export class DeviceTools {
 				}
 				case 'dark-mode': if (typeof command.value !== 'boolean') {throw new Error('Invalid dark mode.');} await shell(['cmd', 'uimode', 'night', command.value ? 'yes' : 'no']); this.settings.darkMode = command.value; break;
 				case 'font-scale': if (!Number.isFinite(command.value) || command.value < 0.85 || command.value > 2) {throw new Error('Text size must be between 85% and 200%.');} await shell(['settings', 'put', 'system', 'font_scale', String(command.value)]); this.settings.fontScale = command.value; break;
-				case 'rotate-left': case 'rotate-right': {
-					const value = Number((await shell(['settings', 'get', 'system', 'user_rotation'])).trim());
-					if (!Number.isInteger(value) || value < 0 || value > 3) {throw new Error('Cannot determine current device rotation.');}
-					await shell(['wm', 'user-rotation', 'lock', String((value + (command.action === 'rotate-left' ? 1 : 3)) % 4)]); break;
-				}
 				case 'screenshot': {
 					const {stdout} = await exec(this.adb, ['-s', serial, 'exec-out', 'screencap', '-p'], {encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 30000, windowsHide: true});
 					if (!stdout.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {throw new Error('Device did not return a PNG screenshot.');}

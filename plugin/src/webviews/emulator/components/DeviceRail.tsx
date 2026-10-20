@@ -15,10 +15,10 @@ export function DeviceRail({ onKey, onRotate, busy = false }: { onKey: (keyCode:
 	return <nav className="device-rail" aria-label="Device controls">
 		{controls.map(({ code, label, Icon, divider }) => <Fragment key={code}>
 			{divider && <div className="rail-divider" />}
-			<button type="button" onClick={() => onKey(code)} aria-label={label} title={label}><Icon size={18} /></button>
+			<button type="button" onClick={() => onKey(code)} aria-label={label}><Icon size={18} /></button>
 		</Fragment>)}
 		<div className="rail-divider" />
-		<button type="button" aria-label="Rotate left" data-hint="Rotate device left (locks orientation)" disabled={busy} onClick={() => onRotate?.('left')}><RotateCcw size={18} /></button>
-		<button type="button" aria-label="Rotate right" data-hint="Rotate device right (locks orientation)" disabled={busy} onClick={() => onRotate?.('right')}><RotateCw size={18} /></button>
+		<button type="button" aria-label="Rotate left" disabled={busy} onClick={() => onRotate?.('left')}><RotateCcw size={18} /></button>
+		<button type="button" aria-label="Rotate right" disabled={busy} onClick={() => onRotate?.('right')}><RotateCw size={18} /></button>
 	</nav>;
 }

@@ -52,7 +52,7 @@ export function LoadingState({ status, startedAt, onRetry }: { status: string; s
 		return () => window.clearTimeout(timer);
 	}, [startedAt]);
 	return <div className="loading" role="status">
-		<div className="loading-bar" role="progressbar" aria-label="Initializing emulator"><div /></div>
+		<div className="loading-bar" role="progressbar" aria-label="Initializing emulator" />
 		<div className="loading-status">{status}</div>
 		{canRetry && onRetry && <button type="button" className="loading-retry" onClick={onRetry}>Taking a while to load, retry?</button>}
 	</div>;

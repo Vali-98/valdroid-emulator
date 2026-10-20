@@ -36,6 +36,7 @@ type inputCommand struct {
 	KeyCode      int32           `json:"keyCode"`
 	MetaState    uint32          `json:"metaState"`
 	RequestID    string          `json:"requestId,omitempty"`
+	Orientation  int32           `json:"orientation"`
 }
 
 var (
@@ -90,6 +91,12 @@ func encodeInputCommand(command inputCommand) ([]byte, error) {
 		message = appendControlInt(message, command.Action)
 		message = appendControlInt(message, command.KeyCode)
 		message = appendLEB128(message, command.MetaState)
+	case "orientation":
+		if command.Orientation < 0 || command.Orientation > 3 {
+			return nil, errors.New("orientation must be between 0 and 3")
+		}
+		message = appendControlInt(message, 4)
+		message = appendControlInt(message, command.Orientation)
 	default:
 		return nil, fmt.Errorf("unsupported input type %q", command.Type)
 	}

@@ -19,13 +19,6 @@ it('reads actual settings and validates text scale before invoking ADB', async (
 	await tools.action({action: 'dark-mode', value: false});
 	expect(runFile).toHaveBeenLastCalledWith('adb', ['-s', 'emulator-5554', 'shell', 'cmd', 'uimode', 'night', 'no']);
 });
-it('rotates left and right with wraparound on the selected device', async () => {
-	vi.mocked(runFile).mockResolvedValue('3');
-	const {tools} = fixture(); await tools.action({action: 'rotate-left'});
-	expect(runFile).toHaveBeenLastCalledWith('adb', ['-s', 'emulator-5554', 'shell', 'wm', 'user-rotation', 'lock', '0']);
-	vi.mocked(runFile).mockResolvedValue('0'); await tools.action({action: 'rotate-right'});
-	expect(runFile).toHaveBeenLastCalledWith('adb', ['-s', 'emulator-5554', 'shell', 'wm', 'user-rotation', 'lock', '3']);
-});
 it('captures binary PNG data and saves only after the user chooses a destination', async () => {
 	const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]); mocks.exec.mockResolvedValue({stdout: png}); mocks.save.mockResolvedValue({fsPath: '/selected/image.png'});
 	await fixture().tools.action({action: 'screenshot'});

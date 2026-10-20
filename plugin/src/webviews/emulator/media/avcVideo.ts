@@ -22,6 +22,9 @@ export function startAVCVideo(serverUrl: string, canvas: HTMLCanvasElement, repo
 	let ready = false;
 	let waitingKey = true;
 	let queued: ArrayBuffer[] = [];
+	let queuedBytes = 0;
+	let decodeTimer: ReturnType<typeof setTimeout> | undefined;
+	let playing = false;
 	let pending: { frame: VideoFrame; receivedAt: number; display: DisplayState } | undefined;
 	let paint = 0;
 	let timer: ReturnType<typeof setInterval> | undefined;
@@ -34,7 +37,7 @@ export function startAVCVideo(serverUrl: string, canvas: HTMLCanvasElement, repo
 	const stop = () => {
 		if (disposed) {return;}
 		disposed = true; generation++;
-		clearInterval(timer); cancelAnimationFrame(paint);
+		clearInterval(timer); clearTimeout(decodeTimer); cancelAnimationFrame(paint);
 		pending?.frame.close(); pending = undefined; queued = []; receipts.clear();
 		if (decoder?.state !== 'closed') {decoder?.close();}
 		if (socket) {socket.onmessage = socket.onerror = socket.onclose = null; socket.close();}
@@ -51,10 +54,17 @@ export function startAVCVideo(serverUrl: string, canvas: HTMLCanvasElement, repo
 		const next = pending; pending = undefined;
 		if (!next) {return;}
 		try {
-			if (canvas.width !== next.frame.displayWidth || canvas.height !== next.frame.displayHeight) {
-				canvas.width = next.frame.displayWidth; canvas.height = next.frame.displayHeight;
+			const correction = (next.display.orientationCorrection ?? 0) & 3;
+			const width = correction % 2 ? next.frame.displayHeight : next.frame.displayWidth;
+			const height = correction % 2 ? next.frame.displayWidth : next.frame.displayHeight;
+			if (canvas.width !== width || canvas.height !== height) {
+				canvas.width = width; canvas.height = height;
 			}
-			context.drawImage(next.frame, 0, 0);
+			if (correction) {
+				context.save();
+				try {context.translate(width / 2, height / 2); context.rotate(-correction * Math.PI / 2); context.drawImage(next.frame, -next.frame.displayWidth / 2, -next.frame.displayHeight / 2);} finally {context.restore();}
+			} else {context.drawImage(next.frame, 0, 0);}
+			if (!playing) {playing = true; report('Playing');}
 			setPresentedDisplay(canvas, next.display); presented++;
 			ages.push(Date.now() - next.receivedAt);
 			if (ages.length > 600) {ages.shift();}
@@ -67,14 +77,24 @@ export function startAVCVideo(serverUrl: string, canvas: HTMLCanvasElement, repo
 		if (decoder.decodeQueueSize >= 12 || receipts.size >= 24) {
 			fail('AVC decoder cannot keep up; restart playback'); return;
 		}
-		if (waitingKey) {report('Playing');}
 		waitingKey = false;
 		receipts.set(packet.timestamp, packet.receivedAt);
 		decoder.decode(new EncodedVideoChunk({ type: packet.key ? 'key' : 'delta', timestamp: packet.timestamp, data: packet.data }));
 	};
+	const pump = () => {
+		decodeTimer = undefined;
+		if (disposed || !ready || !decoder) {return;}
+		try {
+			while (queued.length && decoder.decodeQueueSize < 12 && receipts.size < 24) {
+				const packet = queued.shift()!; queuedBytes -= packet.byteLength; decode(packet);
+			}
+			if (queued.length && !disposed) {decodeTimer = setTimeout(pump, 4);}
+		} catch (error) {fail(`AVC stream error: ${String(error)}`);}
+	};
 	const configure = async (codec: string, nextDisplay: DisplayState) => {
 		const current = ++generation;
-		ready = false; waitingKey = true; queued = []; receipts.clear();
+		ready = false; waitingKey = true; playing = false; queued = []; queuedBytes = 0; receipts.clear();
+		clearTimeout(decodeTimer); decodeTimer = undefined;
 		onStats?.(undefined); delete canvas.dataset.avcProfile;
 		pending?.frame.close(); pending = undefined;
 		if (decoder?.state !== 'closed') {decoder?.close();}
@@ -96,8 +116,7 @@ export function startAVCVideo(serverUrl: string, canvas: HTMLCanvasElement, repo
 		});
 		decoder.configure(config); ready = true;
 		report('Waiting for keyframe…');
-		const packets = queued; queued = [];
-		for (const packet of packets) {if (!disposed) {decode(packet);}}
+		pump();
 	};
 	report('Connecting…');
 	socket = new WebSocket(socketUrl(serverUrl, '/avc')); socket.binaryType = 'arraybuffer';
@@ -108,7 +127,9 @@ export function startAVCVideo(serverUrl: string, canvas: HTMLCanvasElement, repo
 				if (config.type !== 'config' || typeof config.codec !== 'string' || !config.display?.width || !config.display?.height) {throw new Error('Invalid AVC config');}
 				void configure(config.codec, config.display).catch(error => fail(String(error)));
 			} else if (event.data instanceof ArrayBuffer) {
-				if (ready) {decode(event.data);} else if (queued.length < 8) {queued.push(event.data);} else {fail('AVC configuration backlog');}
+				if (queued.length >= 128 || queuedBytes + event.data.byteLength > 16 * 1024 * 1024) {fail('AVC decoder backlog; restart playback'); return;}
+				queued.push(event.data); queuedBytes += event.data.byteLength;
+				if (ready && decodeTimer === undefined) {pump();}
 			}
 		} catch (error) {fail(`AVC stream error: ${String(error)}`);}
 	};

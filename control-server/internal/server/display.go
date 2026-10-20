@@ -9,10 +9,11 @@ import (
 )
 
 type displayState struct {
-	ID          int32 `json:"id"`
-	Width       int32 `json:"width"`
-	Height      int32 `json:"height"`
-	Orientation uint8 `json:"orientation"`
+	ID                    int32 `json:"id"`
+	Width                 int32 `json:"width"`
+	Height                int32 `json:"height"`
+	Orientation           uint8 `json:"orientation"`
+	OrientationCorrection uint8 `json:"orientationCorrection"`
 }
 
 var displayStates = make(map[int32]displayState)

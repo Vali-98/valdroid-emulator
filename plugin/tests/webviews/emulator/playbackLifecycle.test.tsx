@@ -40,3 +40,18 @@ it('keeps the loader visible over a playing stream until the Expo build finishes
 	expect(screen.queryByRole('progressbar')).toBeNull();
 	expect(media.start).toHaveBeenCalledOnce();
 });
+
+it('uses the shared phone frame for each loading phase without restarting playback', () => {
+	const initial = props();
+	const view = render(<EmulatorScreen {...initial} />);
+	const canvas = view.container.querySelector('canvas');
+	for (const status of ['Building…', 'Installing…', 'Launching…', 'Connecting…', 'Reconnecting device…']) {
+		view.rerender(<EmulatorScreen {...initial} launchStatus={status} />);
+		expect(screen.getByText(status).closest('.phone-frame')).toBeTruthy();
+		expect(view.container.querySelector('.phone-loading-layer')?.parentElement).toBe(view.container);
+		expect(view.container.querySelector('canvas')).toBe(canvas);
+	}
+	view.rerender(<EmulatorScreen {...initial} />);
+	expect(view.container.querySelector('.phone-loading-layer')).toBeNull();
+	expect(media.start).toHaveBeenCalledOnce(); expect(media.stops[0]).not.toHaveBeenCalled();
+});

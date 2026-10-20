@@ -15,7 +15,9 @@ import type { VideoStats } from './media/avcVideo';
 import { Toast, type ToastNotice } from './components/Toast';
 import {useElementInspector} from './components/ElementInspector';
 import {ToolbarHints} from './components/ToolbarHints';
+import {ToolbarMenus} from './components/ToolbarMenus';
 import {DeviceSettings} from './components/DeviceSettings';
+import {PhoneFrame} from './components/PhoneFrame';
 
 const initialDisplay: DisplayState = { id: 0, width: 0, height: 0, orientation: 0 };
 
@@ -46,6 +48,7 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 	return <div {...fileDrop.rootProps} className="app" onPointerDownCapture={audio.resume} onKeyDownCapture={audio.resume}>
 		<input {...fileDrop.inputProps} />
 		<ToolbarHints />
+		<ToolbarMenus />
 		<Header title={session.deviceName || 'Emulator Loaded'} loaded debugVisible={debugVisible}
 			busy={host.launch.busy} onLifecycle={host.lifecycle}
 			deviceTools={host.deviceTools} onDeviceAction={host.deviceAction}
@@ -55,7 +58,7 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 			devtools={host.devtools} onToggleScan={host.toggleScan}
 			onToggleDebug={() => setDebugVisible(value => !value)} onClose={onClose} />
 		<main className="stage">
-			<DeviceRail onKey={control.sendDeviceKey} busy={host.deviceTools.busy || host.launch.busy} onRotate={direction => host.deviceAction({action: direction === 'left' ? 'rotate-left' : 'rotate-right'})} />
+			<DeviceRail onKey={control.sendDeviceKey} busy={host.deviceTools.busy || host.launch.busy} onRotate={direction => control.send({type: 'orientation', orientation: (display.orientation + (direction === 'left' ? 1 : 3)) % 4})} />
 			<DeviceSettings state={{...host.deviceTools, busy: host.deviceTools.busy || host.launch.busy}} onAction={host.deviceAction} />
 			<EmulatorScreen serverUrl={serverUrl} display={display} send={control.send} status={videoStatus} onStatus={reportVideoStatus}
 				debuggerPaused={host.devtools.debugger?.attached && host.devtools.debugger.paused} onDebugger={host.debuggerAction}
@@ -82,14 +85,14 @@ export function App() {
 	return <div className="app">
 		<Header title="No Emulator Loaded" loaded={false} />
 		<main className="stage stage-idle">
-			<div className="idle-phone">
+			<PhoneFrame>
 			{host.launch.busy || host.session.state === 'online' ? <LoadingState status={host.launch.busy ? host.launch.status : host.session.status} startedAt={host.loadingStartedAt} onRetry={host.launch.busy ? undefined : host.retry} /> : <DevicePicker
 				targets={host.targets} selected={host.selectedTarget} onSelect={host.selectTarget} onRefresh={host.refreshTargets}
 				onStart={() => {audio.resume(); host.start();}}
 				project={host.project} onStartExpo={host.project.expo ? () => {audio.resume(); host.startExpo();} : undefined}
 				launchWithExpo={host.launchWithExpo} onLaunchWithExpoChange={host.setLaunchWithExpo}
 			/>}
-			</div>
+			</PhoneFrame>
 			{notice && <Toast key={host.notice!.id} notice={notice} onDismiss={host.dismissNotice} />}
 		</main>
 	</div>;

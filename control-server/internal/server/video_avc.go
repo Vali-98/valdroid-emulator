@@ -44,10 +44,7 @@ func avcWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	defer func() { _ = conn.Close(); <-done }()
-	client := &avcClient{display: display, samples: make(chan avcSample, 8)}
-	avcMu.Lock()
-	avcClients[client] = true
-	avcMu.Unlock()
+	client := subscribeAVC(display)
 	defer func() { avcMu.Lock(); delete(avcClients, client); avcMu.Unlock() }()
 	var previous *avcSample
 	waitingKey := true
@@ -64,11 +61,11 @@ func avcWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 			if len(sample.sps) < 4 || len(sample.pps) == 0 {
 				continue
 			}
-			changed := previous == nil || !bytes.Equal(sample.sps, previous.sps) || !bytes.Equal(sample.pps, previous.pps) || sample.header.displayWidth != previous.header.displayWidth || sample.header.displayHeight != previous.header.displayHeight || sample.header.orientation != previous.header.orientation
+			changed := previous == nil || !bytes.Equal(sample.sps, previous.sps) || !bytes.Equal(sample.pps, previous.pps) || sample.header.displayWidth != previous.header.displayWidth || sample.header.displayHeight != previous.header.displayHeight || sample.header.orientation != previous.header.orientation || sample.header.orientationFix != previous.header.orientationFix
 			_ = conn.SetWriteDeadline(time.Now().Add(250 * time.Millisecond))
 			if changed {
 				waitingKey = true
-				if err := conn.WriteJSON(map[string]any{"type": "config", "codec": fmt.Sprintf("avc1.%02X%02X%02X", sample.sps[1], sample.sps[2], sample.sps[3]), "display": displayState{sample.header.displayID, sample.header.displayWidth, sample.header.displayHeight, sample.header.orientation}}); err != nil {
+				if err := conn.WriteJSON(map[string]any{"type": "config", "codec": fmt.Sprintf("avc1.%02X%02X%02X", sample.sps[1], sample.sps[2], sample.sps[3]), "display": displayState{sample.header.displayID, sample.header.displayWidth, sample.header.displayHeight, sample.header.orientation, sample.header.orientationFix}}); err != nil {
 					return
 				}
 			}

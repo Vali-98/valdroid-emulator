@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -41,6 +42,92 @@ func TestAVCBroadcastSharesImmutablePacket(t *testing.T) {
 	parser.updateParameterSets([][]byte{{0x67, 77, 0, 31}, {0x68, 3}})
 	if !bytes.Equal(a.packet[32:], expected) || !bytes.Equal(a.sps, sps) {
 		t.Fatal("queued frame changed after input/configuration reuse")
+	}
+}
+
+func TestAVCSubscriberReceivesCompleteCachedReferenceChain(t *testing.T) {
+	defer closeAVCClients()
+	parser := &avcStreamParser{sps: []byte{0x67, 66, 0, 30}, pps: []byte{0x68, 2}}
+	header := videoPacketHeader{displayID: 9010, displayWidth: 1080, displayHeight: 2400}
+	// The agent's first keyframe arrives before a webview is listening.
+	header.presentationUS = 1
+	publishAVC(header, parser, [][]byte{{0x65, 1}})
+	header.presentationUS = 2
+	publishAVC(header, parser, [][]byte{{0x41, 2}})
+	client := subscribeAVC(9010)
+	if len(client.samples) != 2 {
+		t.Fatalf("bootstrap has %d samples, want keyframe and dependent frame", len(client.samples))
+	}
+	if first, second := <-client.samples, <-client.samples; !first.key || second.key || first.header.presentationUS != 1 || second.header.presentationUS != 2 {
+		t.Fatal("reference chain was reordered or incomplete")
+	}
+	header.presentationUS = 3
+	publishAVC(header, parser, [][]byte{{0x41, 3}})
+	if next := <-client.samples; next.header.presentationUS != 3 {
+		t.Fatal("live stream did not continue after bootstrap")
+	}
+}
+
+func TestAVCConfigIncludesLockedAppRotationCorrection(t *testing.T) {
+	defer closeAVCClients()
+	parser := &avcStreamParser{sps: []byte{0x67, 66, 0, 30}, pps: []byte{0x68, 2}}
+	header := videoPacketHeader{displayID: 9012, displayWidth: 1080, displayHeight: 2400, orientation: 1, orientationFix: 1}
+	publishAVC(header, parser, [][]byte{{0x65, 1}})
+	server := httptest.NewServer(http.HandlerFunc(avcWebSocketHandler))
+	defer server.Close()
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"?display=9012", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var config struct {
+		Display displayState `json:"display"`
+	}
+	if err := conn.ReadJSON(&config); err != nil {
+		t.Fatal(err)
+	}
+	if config.Display.OrientationCorrection != 1 {
+		t.Fatal("rotation correction lost in AVC config")
+	}
+	_, _, _ = conn.ReadMessage()
+	// App begins honoring rotation: requested orientation stays the same, but
+	// the stream no longer needs a renderer-side correction.
+	header.orientationFix = 0
+	publishAVC(header, parser, [][]byte{{0x65, 2}})
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config.Display.OrientationCorrection != 0 {
+		t.Fatal("correction-only change did not reconfigure the viewer")
+	}
+}
+
+func TestAVCBootstrapInvalidatesOnOverflowAndConfigurationChange(t *testing.T) {
+	defer closeAVCClients()
+	parser := &avcStreamParser{sps: []byte{0x67, 66, 0, 30}, pps: []byte{0x68, 2}}
+	header := videoPacketHeader{displayID: 9011, displayWidth: 1080, displayHeight: 2400}
+	publishAVC(header, parser, [][]byte{{0x65, 1}})
+	for i := 0; i < avcBootstrapFrames; i++ {
+		publishAVC(header, parser, [][]byte{{0x41, 2}})
+	}
+	client := subscribeAVC(9011)
+	if len(client.samples) != 0 {
+		t.Fatal("overflow must not seed a partial reference chain")
+	}
+	publishAVC(header, parser, [][]byte{{0x65, 3}})
+	if !((<-client.samples).key) {
+		t.Fatal("stream did not recover at next keyframe")
+	}
+	header.orientation = 1
+	publishAVC(header, parser, [][]byte{{0x41, 4}})
+	fresh := subscribeAVC(9011)
+	if len(fresh.samples) != 0 {
+		t.Fatal("old-orientation frames leaked into new subscription")
 	}
 }
 

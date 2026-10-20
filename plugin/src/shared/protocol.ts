@@ -63,6 +63,7 @@ export interface DisplayState {
 	width: number;
 	height: number;
 	orientation: number;
+	orientationCorrection?: number;
 }
 
 export interface DeviceVolume {
