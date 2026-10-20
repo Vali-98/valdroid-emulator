@@ -53,6 +53,12 @@ export function activate(context: vscode.ExtensionContext): void {
 				} finally {startingExpo = false;}
 			},
 			toggle: enabled => expo.setScan(enabled), state: () => expo.state,
+			lifecycle: async action => {
+				if (startingExpo) {throw new Error('Wait for Expo startup to finish.');}
+				if (!vscode.workspace.isTrusted) {throw new Error('Trust this workspace first.');}
+				if (action === 'clean-rebuild' && await vscode.window.showWarningMessage('Clean Gradle build outputs and rebuild? App data and native source files are retained.', {modal: true}, 'Clean rebuild') !== 'Clean rebuild') {return;}
+				await expo.lifecycle(action);
+			},
 			inspect: request => expo.inspect(request),
 			showHierarchy: async (id, index) => {
 				const fiberId = expo.inspectorHierarchyId(id, index);

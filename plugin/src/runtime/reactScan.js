@@ -1,5 +1,5 @@
 import {createInstrumentation, ReactScanInternals} from 'react-scan/dist/index.mjs';
-import {Dimensions, PixelRatio, StatusBar, Platform} from 'react-native';
+import {Dimensions, PixelRatio, StatusBar, Platform, DevSettings} from 'react-native';
 import {installJSConsole} from './jsConsole';
 import {installElementInspector} from './elementInspector';
 
@@ -79,6 +79,7 @@ export function startScan(controlURL) {
     try {
       const response = await fetch(controlURL);
       const state = await response.json();
+      if (state.reload) {DevSettings.reload(); return;}
       for (const event of await inspect.hierarchy(state.hierarchy)) {
         await fetch(controlURL, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(event)});
       }

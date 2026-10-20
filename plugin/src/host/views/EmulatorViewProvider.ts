@@ -27,7 +27,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		private readonly transferFile: TransferFile,
 		private readonly output: vscode.OutputChannel,
 		private readonly disconnectStream?: (reason: string) => Promise<void>,
-		private readonly expo?: {start: (value: string) => Promise<void>; toggle: (enabled: boolean) => void; state: () => {active: boolean; enabled: boolean; connected: boolean}; inspect?: (request: import('../../shared/inspector').InspectorRequest) => void; openSource?: (id: number, index: number) => Promise<void>; showHierarchy?: (id: number, index: number) => Promise<void>},
+		private readonly expo?: {lifecycle?: (action: import('../../shared/protocol').LifecycleAction) => Promise<void>; start: (value: string) => Promise<void>; toggle: (enabled: boolean) => void; state: () => {active: boolean; enabled: boolean; connected: boolean}; inspect?: (request: import('../../shared/inspector').InspectorRequest) => void; openSource?: (id: number, index: number) => Promise<void>; showHierarchy?: (id: number, index: number) => Promise<void>},
 	) {}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -59,6 +59,12 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 					return;
 				}
 				switch (message.type) {
+					case 'lifecycle':
+						if (this.launchProgress.busy) {break;}
+						this.setLaunchProgress('Preparing action…');
+						try {await this.expo?.lifecycle?.(message.action);}
+						finally {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}
+						break;
 					case 'inspect-show-hierarchy': await this.expo?.showHierarchy?.(message.id, message.index); break;
 					case 'inspect-point': this.expo?.inspect?.(message); break;
 					case 'inspect-open-source': await this.expo?.openSource?.(message.id, message.index); break;

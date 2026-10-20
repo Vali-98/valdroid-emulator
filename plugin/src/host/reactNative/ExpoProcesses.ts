@@ -1,14 +1,66 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { delay, runFile, waitForExit } from '../session/process';
+import * as path from 'node:path';
+import {readAndroidArtifact} from './AndroidArtifact';
+
+export interface ExpoLifecycleOptions {runner: string; stateFile: string; adbPath: string; serial: string;}
 
 export class ExpoProcesses {
 	private readonly children = new Set<ChildProcess>();
 	private readonly abort = new AbortController();
+	private metro?: ChildProcess;
+	async stopMetro(): Promise<void> {
+		const child = this.metro;
+		if (!child?.pid || child.exitCode !== null || child.signalCode !== null) {return;}
+		if (process.platform === 'win32') {await runFile('taskkill', ['/PID', String(child.pid), '/T', '/F']);}
+		else {process.kill(-child.pid, 'SIGTERM'); await waitForExit(child, 3000); if (child.exitCode === null && child.signalCode === null) {process.kill(-child.pid, 'SIGKILL'); await waitForExit(child, 3000);}}
+		this.metro = undefined;
+	}
 	constructor(private readonly log: (text: string) => void, private readonly onProgress: (status: string) => void = () => undefined, private readonly reporterPreload?: string, private readonly injection?: {preload: string; sessionFile: string}) {}
 
-	async start(root: string, cli: string, deviceName: string, port: number, appReady?: Promise<void>): Promise<void> {
-		const metro = this.launch(root, cli, ['start', '--localhost', '--port', String(port)], 'Metro');
+	async start(root: string, cli: string, deviceName: string, port: number, lifecycle: ExpoLifecycleOptions, appReady?: Promise<void>): Promise<void> {
+		this.onProgress('Building…');
+		await this.buildAPK(root, cli, deviceName, port, lifecycle);
+		this.onProgress('Installing…');
+		await this.installAPK(root, port, lifecycle);
+		this.onProgress('Starting Metro…');
+		const metro = await this.startMetro(root, cli, port);
+		this.onProgress('Launching…');
+		await this.launchApp(root, cli, deviceName, port, lifecycle);
+		if (appReady) {
+			this.onProgress('Connecting…');
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			let aborted = () => undefined as void;
+			await new Promise<void>((resolve, reject) => {
+				timer = setTimeout(() => reject(new Error('App did not connect within 90 seconds. See the Metro tab.')), 90000);
+				aborted = () => reject(new Error('Expo startup canceled.'));
+				this.abort.signal.addEventListener('abort', aborted, {once: true});
+				if (this.abort.signal.aborted) {aborted();}
+				void appReady.then(resolve, reject);
+				void metro.done.then(() => reject(new Error('Metro exited before the app connected.')), reject);
+			}).finally(() => {clearTimeout(timer); this.abort.signal.removeEventListener('abort', aborted);});
+		}
+		this.abort.signal.throwIfAborted();
+		if (metro.child.exitCode !== null || metro.child.signalCode !== null) {throw new Error('Metro exited during app launch.');}
+		this.log('\n[Valdroid] App startup complete. Metro remains running.\n');
+	}
+
+	async buildAPK(root: string, cli: string, deviceName: string, port: number, lifecycle: ExpoLifecycleOptions, clean = false): Promise<void> {
+		await this.launch(root, lifecycle.runner, [clean ? 'clean-build' : 'build', lifecycle.stateFile, root, cli, deviceName, lifecycle.serial, String(port)], 'Build').done;
+	}
+	async installAPK(root: string, port: number, lifecycle: ExpoLifecycleOptions): Promise<void> {
+		this.abort.signal.throwIfAborted();
+		const artifact = await readAndroidArtifact(lifecycle.stateFile, root, lifecycle.serial, port);
+		this.log(`[Valdroid] Installing ${artifact.applicationId}, retaining app data.\n`);
+		await this.launchCommand(root, lifecycle.adbPath, ['-s', lifecycle.serial, 'install', '-r', '-t', artifact.apkPath], 'Install').done;
+	}
+	async launchApp(root: string, cli: string, deviceName: string, port: number, lifecycle: ExpoLifecycleOptions): Promise<void> {
+		await this.launch(root, lifecycle.runner, ['launch', lifecycle.stateFile, root, cli, deviceName, lifecycle.serial, String(port)], 'Launch').done;
+	}
+	async startMetro(root: string, cli: string, port: number, clear = false) {
+		const metro = this.launch(root, cli, ['start', '--localhost', '--port', String(port), ...(clear ? ['--clear'] : [])], 'Metro');
+		this.metro = metro.child;
 		// Observe the long-running process immediately, including failures before readiness.
 		let metroError: Error | undefined;
 		void metro.done.catch(error => {metroError = error;});
@@ -32,23 +84,12 @@ export class ExpoProcesses {
 			await delay(400, this.abort.signal);
 		}
 		if (!ready) {throw new Error(`Metro did not become ready within 90 seconds at http://127.0.0.1:${port}/status. Last check: ${lastStatus}. See the Metro tab.`);}
-		this.log('\n[Valdroid] Metro ready. Building and installing Android app…\n');
-		this.onProgress('Building…');
-		// Expo recognizes the existing project server on this port and reuses it.
-		// --no-bundler both conflicts with --port and falls back to port 8081.
-		const build = this.launch(root, cli, ['run:android', '--device', deviceName, '--port', String(port)], 'Build');
-		let runtimeConnected = false;
-		if (appReady) {
-			await Promise.race([build.done, appReady.then(() => {runtimeConnected = true;})]);
-		} else {await build.done;}
-		if (metroError) {throw metroError;}
-		if (metro.child.exitCode !== null || metro.child.signalCode !== null) {throw new Error('Metro exited during the Android build. See the Metro tab.');}
-		this.log(runtimeConnected ? '\n[Valdroid] App runtime connected. Startup complete; Expo processes remain managed.\n' : '\n[Valdroid] Android build/install complete. Metro remains running.\n');
+		this.log('\n[Valdroid] Metro ready.\n');
+		return metro;
 	}
 
 	private launch(root: string, cli: string, args: string[], label: string) {
 		this.abort.signal.throwIfAborted();
-		this.log(`\n[${label}] expo ${args.join(' ')}\n`);
 		const env: NodeJS.ProcessEnv = {...process.env, ELECTRON_RUN_AS_NODE: '1', FORCE_COLOR: '0'};
 		// Piped output already disables Expo's interactive prompts. CI also disables Metro watching.
 		delete env.CI;
@@ -60,7 +101,13 @@ export class ExpoProcesses {
 			env.VALDROID_METRO_SESSION = this.injection.sessionFile;
 			preload.push('--require', this.injection.preload);
 		}
-		const child = spawn(process.execPath, ['--dns-result-order=ipv4first', ...preload, cli, ...args], {
+		return this.launchCommand(root, process.execPath, ['--dns-result-order=ipv4first', ...preload, cli, ...args], label, env);
+	}
+
+	private launchCommand(root: string, executable: string, args: string[], label: string, env: NodeJS.ProcessEnv = {...process.env}) {
+		this.abort.signal.throwIfAborted();
+		this.log(`\n[${label}] ${path.basename(executable)} ${args.join(' ')}\n`);
+		const child = spawn(executable, args, {
 			cwd: root, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'],
 			env,
 		});

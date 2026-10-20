@@ -26,6 +26,7 @@ const esbuildProblemMatcherPlugin = {
 };
 
 async function main() {
+	await esbuild.build({entryPoints: ['src/runtime/expoLifecycle.cjs'], bundle: true, platform: 'node', format: 'cjs', outfile: 'dist/expo-lifecycle.cjs'});
 	await esbuild.build({entryPoints: ['src/runtime/metroIntegration.cjs', 'src/runtime/metroPreload.cjs'], bundle: true, external: ['./metroIntegration.cjs'], platform: 'node', format: 'cjs', outdir: 'dist', outExtension: {'.js': '.cjs'}});
 	await esbuild.build({entryPoints: ['src/runtime/expoReporter.cjs'], bundle: true, platform: 'node', format: 'cjs', outfile: 'dist/expo-reporter.cjs'});
 	const scan = await esbuild.build({entryPoints: ['src/runtime/reactScan.js'], bundle: true, platform: 'browser', external: ['react-native'], format: 'cjs', outfile: 'dist/react-scan-runtime.js', metafile: true});

@@ -44,6 +44,7 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 	return <div {...fileDrop.rootProps} className="app" onPointerDownCapture={audio.resume} onKeyDownCapture={audio.resume}>
 		<input {...fileDrop.inputProps} />
 		<Header title={session.deviceName || 'Emulator Loaded'} loaded debugVisible={debugVisible}
+			busy={host.launch.busy} onLifecycle={host.lifecycle}
 			inspecting={inspector.selecting} onToggleInspector={inspector.toggle}
 			devtools={host.devtools} onToggleScan={host.toggleScan}
 			onToggleDebug={() => setDebugVisible(value => !value)} onClose={onClose} />

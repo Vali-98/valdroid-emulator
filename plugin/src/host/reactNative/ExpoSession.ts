@@ -4,8 +4,10 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { ReactScanIntegration, type ReactScanProject } from './ReactScanIntegration';
-import { runFile } from '../session/process';
+import { runFile, delay } from '../session/process';
 import { ExpoProcesses } from './ExpoProcesses';
+import {readAndroidArtifact} from './AndroidArtifact';
+import {lifecycleActions, type LifecycleAction} from '../../shared/protocol';
 import { resolveExpoDeviceName } from './expoDevice';
 import { parseScanOutlines, type ScanOutlines } from '../../shared/scan';
 import {parseJSLogs, type JSLog} from '../../shared/jsConsole';
@@ -16,6 +18,57 @@ import {parseHierarchySnapshot, parseHierarchyHighlight, validHierarchyId, type 
 
 export class ExpoSession {
 	private processes?: ExpoProcesses;
+	private lifecycleBusy = false;
+	private reloadRequested = false;
+	async lifecycle(action: LifecycleAction): Promise<void> {
+		if (!lifecycleActions.includes(action) || !this.project || !this.processes || !this.serial || !this.metroPort || !this.injection) {throw new Error('Start an Expo session first.');}
+		if (this.lifecycleBusy) {throw new Error('Another lifecycle action is running.');}
+		this.lifecycleBusy = true;
+		const root = this.project.root, serial = this.serial, port = this.metroPort, processes = this.processes;
+		const cli = path.join(root, 'node_modules', 'expo', 'bin', 'cli');
+		const options = {runner: path.join(this.extensionPath, 'dist', 'expo-lifecycle.cjs'), stateFile: path.join(this.injection.directory, 'android-build.json'), adbPath: this.adbPath, serial};
+		try {
+			this.log(`\n[Valdroid] ${action}\n`);
+			this.onProgress({'reload': 'Reloading JS…', 'restart-app': 'Restarting app…', 'restart-metro': 'Restarting Metro…', 'clear-metro': 'Clearing Metro cache…', reinstall: 'Reinstalling app…', rebuild: 'Rebuilding app…', 'clean-rebuild': 'Clean rebuilding app…'}[action]);
+			if (action === 'reload') {
+				if (!this.state.connected) {throw new Error('The app is not connected. Restart the app instead.');}
+				this.connectedAt = 0;
+				this.reloadRequested = true;
+				await this.waitForConnection(processes);
+				return;
+			}
+			if (action === 'restart-metro' || action === 'clear-metro') {
+				this.onProgress('Restarting Metro…');
+				await processes.stopMetro();
+				await processes.startMetro(root, cli, port, action === 'clear-metro');
+				this.onProgress('Launching…'); this.connectedAt = 0;
+				await processes.launchApp(root, cli, await resolveExpoDeviceName(this.adbPath, serial), port, options);
+				await this.waitForConnection(processes);
+				return;
+			}
+			const deviceName = await resolveExpoDeviceName(this.adbPath, serial);
+			if (action === 'rebuild' || action === 'clean-rebuild') {
+				this.onProgress('Building…');
+				await processes.buildAPK(root, cli, deviceName, port, options, action === 'clean-rebuild');
+			}
+			if (action !== 'restart-app') {this.onProgress('Installing…'); await processes.installAPK(root, port, options);}
+			const artifact = await readAndroidArtifact(options.stateFile, root, serial, port);
+			this.onProgress('Launching…');
+			await runFile(this.adbPath, ['-s', serial, 'shell', 'am', 'force-stop', artifact.applicationId]);
+			this.connectedAt = 0;
+			await processes.launchApp(root, cli, deviceName, port, options);
+			await this.waitForConnection(processes);
+		} finally {this.lifecycleBusy = false;}
+	}
+	private async waitForConnection(processes: ExpoProcesses): Promise<void> {
+		this.onProgress('Connecting…');
+		const deadline = Date.now() + 90000;
+		while (!this.connectedAt) {
+			if (this.processes !== processes || this.stopping) {throw new Error('Expo session stopped.');}
+			if (Date.now() > deadline) {throw new Error('App did not reconnect within 90 seconds. See the Metro tab.');}
+			await delay(200);
+		}
+	}
 	private server?: http.Server;
 	private project?: ReactScanProject;
 	private serial?: string;
@@ -76,10 +129,11 @@ export class ExpoSession {
 				return;
 			}
 			if (request.method !== 'GET') {response.writeHead(405).end(); return;}
-			this.connectedAt = Date.now();
-			signalAppReady();
+			const reload = this.reloadRequested;
+			this.reloadRequested = false;
+			if (!reload) {this.connectedAt = Date.now(); signalAppReady();}
 			response.writeHead(200, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'});
-			response.end(JSON.stringify({enabled: this.enabled, inspect: this.inspectRequest, hierarchy: this.hierarchy}));
+			response.end(JSON.stringify({reload, enabled: this.enabled, inspect: this.inspectRequest, hierarchy: this.hierarchy}));
 		});
 		await new Promise<void>((resolve, reject) => {server.once('error', reject); server.listen(0, '127.0.0.1', resolve);});
 		this.server = server;
@@ -99,7 +153,7 @@ export class ExpoSession {
 			await runFile(this.adbPath, ['-s', serial, 'reverse', `tcp:${metroPort}`, `tcp:${metroPort}`]);
 			this.metroPort = metroPort;
 			this.processes = new ExpoProcesses(this.log, this.onProgress, path.join(this.extensionPath, 'dist', 'expo-reporter.cjs'), {preload: path.join(this.extensionPath, 'dist', 'metroPreload.cjs'), sessionFile: this.injection.sessionFile});
-			await this.processes.start(root, path.join(root, 'node_modules', 'expo', 'bin', 'cli'), deviceName, metroPort, appReady);
+			await this.processes.start(root, path.join(root, 'node_modules', 'expo', 'bin', 'cli'), deviceName, metroPort, {runner: path.join(this.extensionPath, 'dist', 'expo-lifecycle.cjs'), stateFile: path.join(this.injection.directory, 'android-build.json'), adbPath: this.adbPath, serial}, appReady);
 		} catch (error) {this.log(`\n[Valdroid] Expo startup failed: ${String(error)}\n`); await this.stop(); throw error;}
 	}
 
@@ -159,6 +213,7 @@ export class ExpoSession {
 	private async stopResources(): Promise<void> {
 		await this.processes?.stop(); this.processes = undefined;
 		this.enabled = false; this.connectedAt = 0;
+		this.reloadRequested = false;
 		this.inspectRequest = undefined; this.inspectResult = undefined;
 		this.hierarchy = {...this.hierarchy, selectedId: undefined, hoveredId: undefined, version: this.hierarchy.version + 1};
 		this.clearHierarchyHighlight();

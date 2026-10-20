@@ -42,7 +42,7 @@
 	}
 	.device-pill {
 		min-width: 0;
-		justify-self: center;
+		justify-self: start;
 		max-width: 100%;
 		padding: 5px 12px;
 		border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
@@ -415,6 +415,9 @@ button:focus-visible { outline: 2px solid var(--vscode-foreground, #ddd); outlin
  .devtools-menu summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
  .devtools-popup { position: absolute; right: 0; top: 100%; z-index: 100; width: 210px; padding: 4px 12px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px; box-shadow: 0 4px 16px #0006; }
  .devtools-popup label { display: flex; justify-content: space-between; align-items: center; }
+ .lifecycle-menu .devtools-popup { left: 0; right: auto; padding: 4px; }
+ .lifecycle-menu .devtools-popup button { display: block; width: 100%; text-align: left; border: 0; border-radius: 3px; padding: 6px 10px; color: var(--vscode-foreground); background: transparent; }
+ .lifecycle-menu .devtools-popup button:hover:not(:disabled) { background: var(--vscode-list-hoverBackground); }
  .devtools-popup .toggle-switch { min-height: 30px; padding: 0; }
  .toggle-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; font-size: 15px; cursor: pointer; }
  .toggle-switch-control { position: relative; display: inline-flex; width: 34px; height: 18px; flex: 0 0 34px; }

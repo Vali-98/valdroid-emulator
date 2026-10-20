@@ -55,6 +55,7 @@ export function useHostSession() {
 	return {
 		...state,
 		devtools,
+		lifecycle: (action: import('../../../shared/protocol').LifecycleAction) => {if (!launch.busy) {setLaunch({busy: true, status: {'reload': 'Reloading JS…', 'restart-app': 'Restarting app…', 'restart-metro': 'Restarting Metro…', 'clear-metro': 'Clearing Metro cache…', reinstall: 'Reinstalling app…', rebuild: 'Rebuilding app…', 'clean-rebuild': 'Clean rebuilding app…'}[action]}); vscode.postMessage({type: 'lifecycle', action});}},
 		project, launch,
 		launchWithExpo,
 		setLaunchWithExpo: (enabled: boolean) => {setLaunchWithExpo(enabled); vscode.postMessage({type: 'expo-preference', enabled});},

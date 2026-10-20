@@ -8,8 +8,11 @@ export interface EmulatorTarget {
 export type SessionState = 'idle' | 'online' | 'error';
 export interface ProjectInfo {type: 'project-info'; expo: boolean; reactNative: boolean;}
 export interface LaunchProgress {type: 'launch-progress'; busy: boolean; status: string;}
+export const lifecycleActions = ['reload', 'restart-app', 'restart-metro', 'clear-metro', 'reinstall', 'rebuild', 'clean-rebuild'] as const;
+export type LifecycleAction = typeof lifecycleActions[number];
 
 export type HostMessage =
+	| {type: 'lifecycle'; action: LifecycleAction}
 	| {type: 'inspect-show-hierarchy'; id: number; index: number}
 	| {type: 'inspect-point'; id: number; x: number; y: number; select?: boolean}
 	| {type: 'inspect-open-source'; id: number; index: number}
