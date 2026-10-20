@@ -13,6 +13,7 @@ import { useFileDrop } from './hooks/useFileDrop';
 import { useHostSession } from './hooks/useHostSession';
 import type { VideoStats } from './media/avcVideo';
 import { Toast, type ToastNotice } from './components/Toast';
+import {useElementInspector} from './components/ElementInspector';
 
 const initialDisplay: DisplayState = { id: 0, width: 0, height: 0, orientation: 0 };
 
@@ -39,15 +40,18 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 	const { data: display = initialDisplay } = useDeviceQuery<DisplayState>(serverUrl, '/api/display-state?display=0', 500);
 	const control = useControlConnection(serverUrl, audio.refreshVolume);
 	const fileDrop = useFileDrop();
+	const inspector = useElementInspector(host.devtools.active);
 	return <div {...fileDrop.rootProps} className="app" onPointerDownCapture={audio.resume} onKeyDownCapture={audio.resume}>
 		<input {...fileDrop.inputProps} />
 		<Header title={session.deviceName || 'Emulator Loaded'} loaded debugVisible={debugVisible}
+			inspecting={inspector.selecting} onToggleInspector={inspector.toggle}
 			devtools={host.devtools} onToggleScan={host.toggleScan}
 			onToggleDebug={() => setDebugVisible(value => !value)} onClose={onClose} />
 		<main className="stage">
 			<DeviceRail onKey={control.sendDeviceKey} />
 			<EmulatorScreen serverUrl={serverUrl} display={display} send={control.send} status={videoStatus} onStatus={reportVideoStatus}
 				launchStatus={host.launch.busy ? host.launch.status : undefined}
+				inspector={inspector}
 				scanEnabled={host.devtools.active && host.devtools.enabled}
 				onStats={setVideoStats} attempt={attempt} onRestart={restartVideo} onRetry={onRetry} startedAt={initialized ? undefined : startedAt} />
 			<TransferFeedback dragging={fileDrop.dragging} notice={notice ?? fileDrop.notice} onDismiss={notice ? onDismissNotice : fileDrop.dismissNotice} />

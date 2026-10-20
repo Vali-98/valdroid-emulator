@@ -5,6 +5,7 @@ import { useEmulatorInput } from '../hooks/useEmulatorInput';
 import { LoadingState } from './DevicePicker';
 import { vscode } from '../../shared/vscode';
 import { ScanOverlay } from './ScanOverlay';
+import {InspectorOverlay, type useElementInspector} from './ElementInspector';
 
 interface PlaybackProps {
 	serverUrl: string;
@@ -30,7 +31,8 @@ function PlaybackCanvas({serverUrl, display, send, onStatus, onStats}: PlaybackP
 		id="screen" aria-label="Android emulator display" draggable={false} tabIndex={0} />;
 }
 
-export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, scanEnabled = false, launchStatus, ...playback}: PlaybackProps & {
+export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, scanEnabled = false, launchStatus, inspector, ...playback}: PlaybackProps & {
+	inspector?: ReturnType<typeof useElementInspector>;
 	launchStatus?: string;
 	scanEnabled?: boolean;
 	status: string;
@@ -39,9 +41,10 @@ export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, 
 	startedAt?: number;
 	onRetry?: () => void;
 }) {
-	return <div className="screen-frame">
+	return <div className={`screen-frame ${inspector?.selecting ? 'inspector-selecting' : ''}`} {...inspector?.screenProps}>
 		<PlaybackCanvas key={attempt} {...playback} />
 		<ScanOverlay enabled={scanEnabled} />
+		{inspector && <InspectorOverlay inspector={inspector} />}
 		{(status !== 'Playing' || launchStatus) && <LoadingState status={launchStatus ?? status} startedAt={startedAt} onRetry={launchStatus ? undefined : onRetry ?? onRestart} />}
 	</div>;
 }

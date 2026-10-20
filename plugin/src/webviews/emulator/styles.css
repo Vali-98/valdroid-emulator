@@ -417,12 +417,12 @@ button:focus-visible { outline: 2px solid var(--vscode-foreground, #ddd); outlin
  .devtools-popup label { display: flex; justify-content: space-between; align-items: center; }
  .devtools-popup .toggle-switch { min-height: 30px; padding: 0; }
  .toggle-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; font-size: 15px; cursor: pointer; }
- .toggle-switch-control { position: relative; display: inline-flex; width: 44px; height: 26px; flex: 0 0 44px; }
+ .toggle-switch-control { position: relative; display: inline-flex; width: 34px; height: 18px; flex: 0 0 34px; }
  .toggle-switch-control input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
  .toggle-switch-track { display: flex; align-items: center; width: 100%; padding: 2px; border: 1px solid var(--vscode-input-border, var(--vscode-descriptionForeground)); border-radius: 999px; background: var(--vscode-input-background); pointer-events: none; transition: background 120ms ease, border-color 120ms ease; }
- .toggle-switch-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--vscode-descriptionForeground); transition: transform 120ms ease, background 120ms ease; }
+ .toggle-switch-thumb { width: 12px; height: 12px; flex-shrink: 0; border-radius: 50%; background: var(--vscode-descriptionForeground); transition: transform 120ms ease, background 120ms ease; }
  .toggle-switch-control input:checked + .toggle-switch-track { background: var(--vscode-button-background); border-color: var(--vscode-button-background); }
- .toggle-switch-control input:checked + .toggle-switch-track .toggle-switch-thumb { transform: translateX(18px); background: var(--vscode-button-foreground); }
+ .toggle-switch-control input:checked + .toggle-switch-track .toggle-switch-thumb { transform: translateX(16px); background: var(--vscode-button-foreground); }
  .toggle-switch-control input:focus-visible + .toggle-switch-track { outline: 1px solid var(--vscode-focusBorder); outline-offset: 3px; }
  .toggle-switch:has(input:disabled) { cursor: default; opacity: .5; }
  @media (prefers-reduced-motion: reduce) { .toggle-switch-track, .toggle-switch-thumb { transition: none; } }
@@ -432,3 +432,19 @@ button:focus-visible { outline: 2px solid var(--vscode-foreground, #ddd); outlin
  .project-start-actions .project-start-button { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px; border-radius: 999px; color: #fff; background: #080808; border: 1px solid #3a3a3a; font-size: 12px; transition: background-color 120ms ease; }
  .project-start-actions .project-start-button:hover:not(:disabled) { background: #2b2b2b; }
  .screen-frame > .loading { z-index: 3; background: var(--vscode-sideBar-background); }
+ .inspector-button { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; padding: 0; border-color: transparent; border-radius: 6px; color: var(--vscode-icon-foreground); background: transparent; }
+ .inspector-button:hover:not(:disabled) { background: var(--vscode-toolbar-hoverBackground); }
+ .inspector-button[aria-pressed="true"], .inspector-button[aria-pressed="true"]:hover { color: #fff; background: #7c3aed; }
+ .inspector-selecting, .inspector-selecting #screen { cursor: crosshair; }
+ .inspector-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+ .inspector-highlight { position: absolute; box-sizing: border-box; border: 2px solid #38bdf8; background: #38bdf822; }
+ .inspector-popup { position: absolute; width: min(320px, calc(100% - 16px)); max-height: min(360px, 75%); overflow: auto; pointer-events: auto; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px; box-shadow: 0 4px 16px #0006; padding: 4px; cursor: default; }
+ .inspector-tooltip { width: max-content; max-width: calc(100% - 16px); pointer-events: none; }
+ .inspector-heading { display: flex; justify-content: space-between; align-items: center; padding-left: 6px; font-size: 12px; }
+ .inspector-heading > button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-color: transparent; border-radius: 4px; color: var(--vscode-icon-foreground); background: transparent; }
+ .inspector-popup > button { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px; border-color: transparent; border-radius: 4px; color: var(--vscode-foreground); background: transparent; }
+ .inspector-heading > button:hover:not(:disabled), .inspector-popup > button:hover:not(:disabled) { background: var(--vscode-toolbar-hoverBackground); }
+ .inspector-popup > button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ .inspector-popup small, .inspector-popup p { color: var(--vscode-descriptionForeground); font-size: 11px; }
+ .inspector-popup small { flex-shrink: 0; }
+ .inspector-popup p { margin: 6px; }

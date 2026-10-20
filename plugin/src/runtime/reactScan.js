@@ -1,6 +1,7 @@
 import {createInstrumentation, ReactScanInternals} from 'react-scan/dist/index.mjs';
 import {Dimensions, PixelRatio, StatusBar, Platform} from 'react-native';
 import {installJSConsole} from './jsConsole';
+import {installElementInspector} from './elementInspector';
 
 export function startScan(controlURL) {
   installJSConsole(controlURL);
@@ -43,6 +44,8 @@ export function startScan(controlURL) {
     onError: error => console.warn('[Valdroid Scan]', String(error)),
   });
   ReactScanInternals.instrumentation = instrumentation;
+  const inspect = installElementInspector();
+  let inspectedId = 0;
 
   const flush = async () => {
     if (!enabled || inFlight || !pending.size) return;
@@ -76,6 +79,11 @@ export function startScan(controlURL) {
     try {
       const response = await fetch(controlURL);
       const state = await response.json();
+      if (state.inspect && state.inspect.id > inspectedId) {
+        inspectedId = state.inspect.id;
+        const result = await inspect(state.inspect);
+        await fetch(controlURL, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(result)});
+      }
       if (enabled !== Boolean(state.enabled)) {
         enabled = Boolean(state.enabled); generation++;
         pending.clear(); instrumentation.isPaused.value = !enabled;
@@ -83,7 +91,7 @@ export function startScan(controlURL) {
     } catch {
       enabled = false; generation++; pending.clear(); instrumentation.isPaused.value = true;
     }
-    setTimeout(poll, 750);
+    setTimeout(poll, 100);
   };
   instrumentation.isPaused.value = true;
   poll();

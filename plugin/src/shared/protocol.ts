@@ -10,6 +10,8 @@ export interface ProjectInfo {type: 'project-info'; expo: boolean; reactNative: 
 export interface LaunchProgress {type: 'launch-progress'; busy: boolean; status: string;}
 
 export type HostMessage =
+	| {type: 'inspect-point'; id: number; x: number; y: number; select?: boolean}
+	| {type: 'inspect-open-source'; id: number; index: number}
 	| {type: 'expo-preference'; enabled: boolean}
 	| {type: 'start-expo'; value: string}
 	| {type: 'scan-toggle'; enabled: boolean}
@@ -44,7 +46,7 @@ export interface StatusMessage {
 
 export interface SessionNotice { type: 'notice'; id: number; message: string; level: 'info' | 'error'; }
 export interface DevtoolsState {type: 'devtools'; active: boolean; enabled: boolean; connected: boolean;}
-export type ExtensionMessage = {type: 'expo-preference'; enabled: boolean} | ProjectInfo | LaunchProgress | import('./scan').ScanOutlines | DevtoolsState | StatusMessage | SessionNotice | { type: 'targets'; targets: EmulatorTarget[] } | UploadReply | UploadProgress;
+export type ExtensionMessage = import('./inspector').InspectorResult | {type: 'expo-preference'; enabled: boolean} | ProjectInfo | LaunchProgress | import('./scan').ScanOutlines | DevtoolsState | StatusMessage | SessionNotice | { type: 'targets'; targets: EmulatorTarget[] } | UploadReply | UploadProgress;
 
 export interface DisplayState {
 	id: number;

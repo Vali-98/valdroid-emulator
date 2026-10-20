@@ -8,6 +8,8 @@ import { ExpoProcesses } from './ExpoProcesses';
 import { resolveExpoDeviceName } from './expoDevice';
 import { parseScanOutlines, type ScanOutlines } from '../../shared/scan';
 import {parseJSLogs, type JSLog} from '../../shared/jsConsole';
+import {parseInspectorResult, type InspectorRequest, type InspectorResult} from '../../shared/inspector';
+import {resolveInspectorElements, localInspectorSource} from './inspectorSource';
 
 export class ExpoSession {
 	private processes?: ExpoProcesses;
@@ -18,7 +20,9 @@ export class ExpoSession {
 	private enabled = false;
 	private connectedAt = 0;
 	private stopping?: Promise<void>;
-	constructor(private readonly extensionPath: string, private readonly adbPath: string, private readonly log: (text: string) => void = () => undefined, private readonly onOutlines: (batch: ScanOutlines) => void = () => undefined, private readonly onProgress: (status: string) => void = () => undefined, private readonly onJSLogs: (records: Omit<JSLog, 'id'>[]) => void = () => undefined) {}
+	private inspectRequest?: InspectorRequest;
+	private inspectResult?: InspectorResult;
+	constructor(private readonly extensionPath: string, private readonly adbPath: string, private readonly log: (text: string) => void = () => undefined, private readonly onOutlines: (batch: ScanOutlines) => void = () => undefined, private readonly onProgress: (status: string) => void = () => undefined, private readonly onJSLogs: (records: Omit<JSLog, 'id'>[]) => void = () => undefined, private readonly onInspection: (result: InspectorResult) => void = () => undefined) {}
 
 	async start(root: string, serial: string): Promise<void> {
 		await this.stop();
@@ -44,6 +48,12 @@ export class ExpoSession {
 					if (response.writableEnded) {return;}
 					try {
 						const event: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+						const inspection = parseInspectorResult(event);
+						if (inspection) {
+							response.writeHead(204).end();
+							void this.receiveInspection(root, inspection).catch(error => this.log(`[Valdroid] Inspector: ${String(error)}\n`));
+							return;
+						}
 						const records = parseJSLogs(event);
 						if (records) {this.onJSLogs(records); response.writeHead(204).end(); return;}
 						const batch = parseScanOutlines(event);
@@ -59,7 +69,7 @@ export class ExpoSession {
 			this.connectedAt = Date.now();
 			signalAppReady();
 			response.writeHead(200, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'});
-			response.end(JSON.stringify({enabled: this.enabled}));
+			response.end(JSON.stringify({enabled: this.enabled, inspect: this.inspectRequest}));
 		});
 		await new Promise<void>((resolve, reject) => {server.once('error', reject); server.listen(0, '127.0.0.1', resolve);});
 		this.server = server;
@@ -87,6 +97,25 @@ export class ExpoSession {
 		if (!this.project) {throw new Error('Start an Expo session first.');}
 		this.enabled = enabled;
 	}
+	inspect(request: InspectorRequest): void {
+		if (!this.project || !Number.isSafeInteger(request.id) || request.id < 1 || ![request.x, request.y].every(n => Number.isFinite(n) && n >= 0 && n <= 1)) {return;}
+		this.inspectRequest = request;
+	}
+	private async receiveInspection(root: string, result: InspectorResult): Promise<void> {
+		if (result.id !== this.inspectRequest?.id) {return;}
+		// Highlight immediately; source-map resolution must not make hovering laggy.
+		this.inspectResult = {...result, elements: result.elements.map(({name}) => ({name}))};
+		this.onInspection(this.inspectResult);
+		if (!this.inspectRequest?.select) {return;}
+		const elements = await resolveInspectorElements(root, this.metroPort, result.elements);
+		if (result.id !== this.inspectRequest?.id || !this.project) {return;}
+		this.inspectResult = {...result, elements, resolved: true};
+		this.onInspection(this.inspectResult);
+	}
+	async inspectorSource(id: number, index: number) {
+		if (id !== this.inspectResult?.id || !Number.isSafeInteger(index) || index < 0 || !this.project) {return;}
+		return localInspectorSource(this.project.root, this.inspectResult.elements[index]?.source);
+	}
 	get state() {return {active: Boolean(this.project), enabled: this.enabled, connected: Date.now() - this.connectedAt < 4000};}
 
 	stop(): Promise<void> {
@@ -99,6 +128,7 @@ export class ExpoSession {
 	private async stopResources(): Promise<void> {
 		await this.processes?.stop(); this.processes = undefined;
 		this.enabled = false; this.connectedAt = 0;
+		this.inspectRequest = undefined; this.inspectResult = undefined;
 		if (this.server) {this.server.closeAllConnections(); await new Promise<void>(resolve => this.server!.close(() => resolve())); this.server = undefined;}
 		if (this.serial && this.port) {await runFile(this.adbPath, ['-s', this.serial, 'reverse', '--remove', `tcp:${this.port}`]).catch(() => undefined);}
 		if (this.serial && this.metroPort) {await runFile(this.adbPath, ['-s', this.serial, 'reverse', '--remove', `tcp:${this.metroPort}`]).catch(() => undefined);}

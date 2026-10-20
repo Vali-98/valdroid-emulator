@@ -26,7 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	shutdownConsole = () => console.dispose();
 	let session: EmulatorSession;
 	let startingExpo = false;
-	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records));
+	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records), result => provider.postInspection(result));
 	const stop = async () => {await expo.stop(); await session.stop();};
 	const provider = new EmulatorViewProvider(context, discover, async value => {await expo.stop(); await session.startTarget(value);}, stop,
 		() => session.deviceSerial, (file, name, serial, signal, progress) => session.transferFile(file, name, serial, signal, progress), output,
@@ -52,6 +52,14 @@ export function activate(context: vscode.ExtensionContext): void {
 				} finally {startingExpo = false;}
 			},
 			toggle: enabled => expo.setScan(enabled), state: () => expo.state,
+			inspect: request => expo.inspect(request),
+			openSource: async (id, index) => {
+				const source = await expo.inspectorSource(id, index);
+				if (!source) {provider.notify('Source location is unavailable for this component.', 'info'); return;}
+				const document = await vscode.workspace.openTextDocument(vscode.Uri.file(source.fileName));
+				const position = new vscode.Position(source.lineNumber - 1, Math.max(0, source.columnNumber - 1));
+				await vscode.window.showTextDocument(document, {selection: new vscode.Range(position, position), preview: true});
+			},
 		});
 	session = new EmulatorSession(context.extensionPath, adbPath, emulatorPath, bitRate, output, provider, serial => console.setDevice(serial));
 	shutdownExtension = async () => {await provider.cancelUploads(); await stop();};
