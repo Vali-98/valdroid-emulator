@@ -17,13 +17,20 @@ export interface ConsoleState {
 	processes: Record<string, string>;
 }
 export type ConsoleRequest =
+	| {type: 'js-clear'}
+	| {type: 'metro-clear'}
 	| { type: 'console-ready' | 'console-clear' | 'console-toggle' | 'console-cancel' | 'console-copy'; text?: string }
 	| { type: 'console-command'; command: string };
 export type ConsoleMessage =
+	| {type: 'js-snapshot' | 'js-records'; records: import('./jsConsole').JSLog[]; oldestID?: number}
+	| import('./protocol').ProjectInfo
+	| {type: 'metro-snapshot'; text: string; focus?: boolean}
+	| {type: 'metro-output'; text: string}
 	| { type: 'console-snapshot'; state: ConsoleState; records: ConsoleRecord[] }
 	| { type: 'console-state'; state: ConsoleState }
 	| { type: 'console-records'; records: ConsoleRecord[] };
 export const consoleLimit = 5000;
+export const metroLogLimit = 2 * 1024 * 1024;
 export const levelRank: Record<LogLevel, number> = { V: 0, D: 1, I: 2, W: 3, E: 4, F: 5 };
 
 export function parseLogcat(line: string, id: number, processes: Record<string, string>): ConsoleRecord {

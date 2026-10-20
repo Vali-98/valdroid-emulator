@@ -16,7 +16,8 @@ import { Toast, type ToastNotice } from './components/Toast';
 
 const initialDisplay: DisplayState = { id: 0, width: 0, height: 0, orientation: 0 };
 
-function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, startedAt, notice, onDismissNotice }: {
+function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, startedAt, notice, onDismissNotice, host }: {
+	host: ReturnType<typeof useHostSession>;
 	serverUrl: string;
 	session: StatusMessage;
 	audio: ReturnType<typeof useAudio>;
@@ -41,10 +42,13 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 	return <div {...fileDrop.rootProps} className="app" onPointerDownCapture={audio.resume} onKeyDownCapture={audio.resume}>
 		<input {...fileDrop.inputProps} />
 		<Header title={session.deviceName || 'Emulator Loaded'} loaded debugVisible={debugVisible}
+			devtools={host.devtools} onToggleScan={host.toggleScan}
 			onToggleDebug={() => setDebugVisible(value => !value)} onClose={onClose} />
 		<main className="stage">
 			<DeviceRail onKey={control.sendDeviceKey} />
 			<EmulatorScreen serverUrl={serverUrl} display={display} send={control.send} status={videoStatus} onStatus={reportVideoStatus}
+				launchStatus={host.launch.busy ? host.launch.status : undefined}
+				scanEnabled={host.devtools.active && host.devtools.enabled}
 				onStats={setVideoStats} attempt={attempt} onRestart={restartVideo} onRetry={onRetry} startedAt={initialized ? undefined : startedAt} />
 			<TransferFeedback dragging={fileDrop.dragging} notice={notice ?? fileDrop.notice} onDismiss={notice ? onDismissNotice : fileDrop.dismissNotice} />
 		</main>
@@ -59,16 +63,18 @@ export function App() {
 	const audio = useAudio(serverUrl);
 	const notice: ToastNotice | undefined = host.notice ? {message: host.notice.message, phase: host.notice.level, startedAt: host.notice.id} : undefined;
 	if (serverUrl) {
-		return <EmulatorWorkspace key={serverUrl} serverUrl={serverUrl} session={host.session} audio={audio} onClose={host.close}
+		return <EmulatorWorkspace host={host} key={serverUrl} serverUrl={serverUrl} session={host.session} audio={audio} onClose={host.close}
 			onRetry={host.retry} startedAt={host.loadingStartedAt} notice={notice} onDismissNotice={host.dismissNotice} />;
 	}
 	return <div className="app">
 		<Header title="No Emulator Loaded" loaded={false} />
 		<main className="stage stage-idle">
 			<div className="idle-phone">
-			{host.session.state === 'online' ? <LoadingState status={host.session.status} startedAt={host.loadingStartedAt} onRetry={host.retry} /> : <DevicePicker
+			{host.launch.busy || host.session.state === 'online' ? <LoadingState status={host.launch.busy ? host.launch.status : host.session.status} startedAt={host.loadingStartedAt} onRetry={host.launch.busy ? undefined : host.retry} /> : <DevicePicker
 				targets={host.targets} selected={host.selectedTarget} onSelect={host.selectTarget} onRefresh={host.refreshTargets}
 				onStart={() => {audio.resume(); host.start();}}
+				project={host.project} onStartExpo={host.project.expo ? () => {audio.resume(); host.startExpo();} : undefined}
+				launchWithExpo={host.launchWithExpo} onLaunchWithExpoChange={host.setLaunchWithExpo}
 			/>}
 			</div>
 			{notice && <Toast key={host.notice!.id} notice={notice} onDismiss={host.dismissNotice} />}

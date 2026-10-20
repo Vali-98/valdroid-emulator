@@ -25,6 +25,9 @@ function dependencyNotices(metafiles) {
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
     const files = fs.readdirSync(root).filter(name => /^(licen[sc]e|copying|notice)(\.|$)/i.test(name));
     const texts = files.map(name => fs.readFileSync(path.join(root, name), 'utf8'));
+    if (!texts.length && ['preact-compat', 'preact-hooks', 'preact-jsx-runtime', 'jsx-runtime'].includes(manifest.name)) {
+      texts.push(fs.readFileSync(path.join(root, '..', 'LICENSE'), 'utf8'));
+    }
     if (!texts.length && ['opus-decoder', '@wasm-audio-decoders/common'].includes(manifest.name)) {
       texts.push(fs.readFileSync(path.join(__dirname, '../../licenses/wasm-audio-decoders.txt'), 'utf8'));
     }

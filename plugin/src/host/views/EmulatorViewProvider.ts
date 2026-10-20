@@ -12,6 +12,11 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private lastTarget?: string;
 	private noticeID = 0;
 	private retrying = false;
+	private projectInfo: import('../../shared/protocol').ProjectInfo = {type: 'project-info', expo: false, reactNative: false};
+	private launchProgress: import('../../shared/protocol').LaunchProgress = {type: 'launch-progress', busy: false, status: ''};
+	private expoTarget?: string;
+	setProjectInfo(info: import('../../shared/protocol').ProjectInfo): void {this.projectInfo = info; this.postMessage(info);}
+	setLaunchProgress(status: string): void {this.launchProgress = {type: 'launch-progress', busy: true, status}; this.postMessage(this.launchProgress);}
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -22,6 +27,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		private readonly transferFile: TransferFile,
 		private readonly output: vscode.OutputChannel,
 		private readonly disconnectStream?: (reason: string) => Promise<void>,
+		private readonly expo?: {start: (value: string) => Promise<void>; toggle: (enabled: boolean) => void; state: () => {active: boolean; enabled: boolean; connected: boolean}},
 	) {}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -53,7 +59,15 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 					return;
 				}
 				switch (message.type) {
+					case 'expo-preference':
+						if (typeof message.enabled === 'boolean') {await this.context.workspaceState.update('valdroid.launchWithExpo', message.enabled);}
+						break;
+					case 'start-expo': await this.startExpo(message.value); break;
+					case 'scan-toggle': this.expo?.toggle(message.enabled); this.postDevtools(); break;
+					case 'devtools-refresh': this.postDevtools(); break;
 					case 'ready':
+						this.postMessage({type: 'expo-preference', enabled: this.context.workspaceState?.get<boolean>('valdroid.launchWithExpo', false) ?? false});
+						this.postMessage(this.projectInfo); this.postMessage(this.launchProgress);
 						await applyInitialPanelSize(this.context, webviewView, () => vscode.commands.executeCommand('workbench.action.increaseViewSize'))
 							.catch(error => this.output.appendLine(`Could not adjust initial emulator panel size: ${String(error)}`));
 						await this.refreshTargets();
@@ -68,6 +82,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 						}
 						break;
 					case 'retry':
+						if (this.expoTarget) {await this.startExpo(this.expoTarget); break;}
 						if (this.lastTarget && !this.retrying) {
 							this.retrying = true;
 							try {
@@ -110,9 +125,17 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	async start(value: string): Promise<void> {
+		this.expoTarget = undefined;
 		this.lastTarget = value;
 		this.setStatus(value.startsWith('avd:') ? 'Starting emulator…' : 'Connecting to device…', 'online');
 		await this.startTarget(value);
+	}
+	private async startExpo(value: string): Promise<void> {
+		if (this.launchProgress.busy || !this.expo) {return;}
+		this.expoTarget = value;
+		this.setLaunchProgress('Starting Expo session…');
+		try {await this.expo.start(value); this.postDevtools();}
+		finally {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}
 	}
 
 	setServer(serverUrl?: string, deviceName?: string): void {
@@ -123,6 +146,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	async cancelUploads(): Promise<void> {await this.uploads?.cancelAll();}
+	postOutlines(batch: import('../../shared/scan').ScanOutlines): void {this.postMessage(batch);}
 
 	notify(message: string, level: 'info' | 'error'): void {
 		this.output.appendLine(`${level === 'error' ? 'Error' : 'Notice'}: ${message}`);
@@ -141,4 +165,5 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private postMessage(message: ExtensionMessage): void {
 		void this.view?.webview.postMessage(message);
 	}
+	private postDevtools(): void {this.postMessage({type: 'devtools', ...(this.expo?.state() ?? {active: false, enabled: false, connected: false})});}
 }

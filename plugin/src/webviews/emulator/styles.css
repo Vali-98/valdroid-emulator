@@ -10,31 +10,35 @@
 		font-size: var(--vscode-font-size);
 	}
 	.app {
+		user-select: none;
+		-webkit-user-select: none;
 		display: grid;
 		grid-template-rows: auto minmax(0, 1fr) auto;
 		height: 100vh;
 		min-width: 0;
 	}
+	.app input, .app textarea {
+		user-select: text;
+		-webkit-user-select: text;
+	}
 	.topbar {
 		display: grid;
-		grid-template-columns: 72px minmax(0, 1fr) 72px;
+		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 8px;
 		min-height: 42px;
-		padding: 6px 0px;
+		padding: 6px 8px;
 		border-bottom: 1px solid var(--vscode-panel-border);
 		background: var(--vscode-sideBar-background);
 	}
 	.topbar-spacer {
-		display: flex;
-		align-items: center;
-		width: 72px;
-		height: 32px;
+		display: none;
 	}
 	.topbar-actions {
 		display: flex;
 		justify-content: flex-end;
 		gap: 4px;
+		flex-shrink: 0;
 	}
 	.device-pill {
 		min-width: 0;
@@ -280,12 +284,12 @@
 	}
 	.device-picker {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 36px;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 6px;
 		width: min(100%, 420px);
 		padding: 6px;
 		border: 1px solid #3a3a3a;
-		border-radius: 999px;
+		border-radius: 22px;
 		background: #181818;
 		box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
 	}
@@ -404,3 +408,26 @@
 .device-picker .play-button:focus { outline: none; box-shadow: none; }
 .debug-button[aria-pressed="true"] { color: var(--valdroid-on-primary); background: var(--valdroid-primary); }
 button:focus-visible { outline: 2px solid var(--vscode-foreground, #ddd); outline-offset: 2px; }
+ .devtools-menu { position: relative; font-size: 14px; flex: 0 0 28px; }
+ .devtools-menu summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 4px; }
+ .devtools-menu summary::-webkit-details-marker { display: none; }
+ .devtools-menu summary:hover, .devtools-menu[open] summary { background: var(--vscode-toolbar-hoverBackground); }
+ .devtools-menu summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
+ .devtools-popup { position: absolute; right: 0; top: 100%; z-index: 100; width: 210px; padding: 12px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px; box-shadow: 0 4px 16px #0006; }
+ .devtools-popup label { display: flex; justify-content: space-between; align-items: center; }
+ .toggle-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; font-size: 15px; cursor: pointer; }
+ .toggle-switch-control { position: relative; display: inline-flex; width: 44px; height: 26px; flex: 0 0 44px; }
+ .toggle-switch-control input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+ .toggle-switch-track { display: flex; align-items: center; width: 100%; padding: 2px; border: 1px solid var(--vscode-input-border, var(--vscode-descriptionForeground)); border-radius: 999px; background: var(--vscode-input-background); pointer-events: none; transition: background 120ms ease, border-color 120ms ease; }
+ .toggle-switch-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--vscode-descriptionForeground); transition: transform 120ms ease, background 120ms ease; }
+ .toggle-switch-control input:checked + .toggle-switch-track { background: var(--vscode-button-background); border-color: var(--vscode-button-background); }
+ .toggle-switch-control input:checked + .toggle-switch-track .toggle-switch-thumb { transform: translateX(18px); background: var(--vscode-button-foreground); }
+ .toggle-switch-control input:focus-visible + .toggle-switch-track { outline: 1px solid var(--vscode-focusBorder); outline-offset: 3px; }
+ .toggle-switch:has(input:disabled) { cursor: default; opacity: .5; }
+ @media (prefers-reduced-motion: reduce) { .toggle-switch-track, .toggle-switch-thumb { transition: none; } }
+ .scan-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+ .project-start-actions > .toggle-switch { padding: 4px 10px; font-size: 13px; }
+ .project-start-actions { display: flex; flex-direction: column; gap: 8px; width: min(100%, 420px); }
+ .project-start-actions .project-start-button { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px; border-radius: 999px; color: #fff; background: #080808; border: 1px solid #3a3a3a; font-size: 12px; transition: background-color 120ms ease; }
+ .project-start-actions .project-start-button:hover:not(:disabled) { background: #2b2b2b; }
+ .screen-frame > .loading { z-index: 3; background: var(--vscode-sideBar-background); }

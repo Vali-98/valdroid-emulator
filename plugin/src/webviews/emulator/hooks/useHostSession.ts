@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { EmulatorTarget, ExtensionMessage, StatusMessage, SessionNotice } from '../../../shared/protocol';
+import type { DevtoolsState, EmulatorTarget, ExtensionMessage, StatusMessage, SessionNotice } from '../../../shared/protocol';
 import { vscode } from '../../shared/vscode';
 
 interface HostState {
@@ -32,19 +32,37 @@ function reducer(state: HostState, message: Action): HostState {
 }
 
 export function useHostSession() {
+	const [launchWithExpo, setLaunchWithExpo] = React.useState(false);
+	const [project, setProject] = React.useState({expo: false, reactNative: false});
+	const [launch, setLaunch] = React.useState({busy: false, status: ''});
+	const [devtools, setDevtools] = React.useState<DevtoolsState>({type: 'devtools', active: false, enabled: false, connected: false});
 	const [state, dispatch] = React.useReducer(reducer, {
 		targets: [], selectedTarget: '', session: { type: 'status', state: 'idle', status: 'Select an emulator' },
 	});
 	React.useEffect(() => {
 		const handleMessage = (event: MessageEvent<ExtensionMessage>) => {
+			if (event.data?.type === 'expo-preference') {setLaunchWithExpo(event.data.enabled);}
+			if (event.data?.type === 'project-info') {setProject(event.data);}
+			if (event.data?.type === 'launch-progress') {setLaunch(event.data);}
+			if (event.data?.type === 'devtools') {setDevtools(event.data);}
 			if (event.data?.type === 'targets' || event.data?.type === 'status' || event.data?.type === 'notice') {dispatch(event.data);}
 		};
 		window.addEventListener('message', handleMessage);
 		vscode.postMessage({ type: 'ready' });
-		return () => window.removeEventListener('message', handleMessage);
+		const timer = window.setInterval(() => vscode.postMessage({type: 'devtools-refresh'}), 1500);
+		return () => {window.clearInterval(timer); window.removeEventListener('message', handleMessage);};
 	}, []);
 	return {
 		...state,
+		devtools,
+		project, launch,
+		launchWithExpo,
+		setLaunchWithExpo: (enabled: boolean) => {setLaunchWithExpo(enabled); vscode.postMessage({type: 'expo-preference', enabled});},
+		toggleScan: (enabled: boolean) => vscode.postMessage({type: 'scan-toggle', enabled}),
+		startExpo: () => {if (state.selectedTarget) {
+			setLaunch({busy: true, status: 'Starting Expo session…'});
+			vscode.postMessage({type: 'start-expo', value: state.selectedTarget});
+		}},
 		selectTarget: (value: string) => dispatch({ type: 'select', value }),
 		refreshTargets: React.useCallback(() => vscode.postMessage({ type: 'refresh' }), []),
 		start: () => {if (state.selectedTarget) {vscode.postMessage({ type: 'start', value: state.selectedTarget });}},

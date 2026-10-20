@@ -35,3 +35,26 @@ it('persists preferences on user actions instead of log updates', () => {
 	device('emulator-5580');
 	expect(bridge.setState).toHaveBeenCalledOnce();
 });
+
+it('retains Metro output while switching tabs and accepts a restored host snapshot', () => {
+	render(<ConsoleApp />);
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'project-info', expo: true, reactNative: true}})));
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'metro-snapshot', text: 'previous build\n'}})));
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'metro-output', text: 'Metro ready\n'}})));
+	fireEvent.click(screen.getByRole('tab', {name: 'Metro'}));
+	expect(screen.getByRole('tabpanel', {name: 'Metro'}).textContent).toContain('previous build\nMetro ready');
+	fireEvent.click(screen.getByRole('tab', {name: 'Logcat'}));
+	fireEvent.click(screen.getByRole('tab', {name: 'Metro'}));
+	expect(screen.getByRole('tabpanel', {name: 'Metro'}).textContent).toContain('previous build\nMetro ready');
+});
+
+it('shows no tab bar in generic projects, even if Metro was previously selected', () => {
+	render(<ConsoleApp />);
+	expect(screen.queryByRole('tablist')).toBeNull();
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'project-info', expo: true, reactNative: true}})));
+	fireEvent.click(screen.getByRole('tab', {name: 'Metro'}));
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'project-info', expo: false, reactNative: false}})));
+	expect(screen.queryByRole('tablist')).toBeNull();
+	expect(screen.queryByRole('tabpanel', {name: 'Metro'})).toBeNull();
+	expect(screen.getByRole('textbox', {name: 'ADB command'})).toBeTruthy();
+});

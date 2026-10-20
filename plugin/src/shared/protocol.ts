@@ -6,8 +6,14 @@ export interface EmulatorTarget {
 }
 
 export type SessionState = 'idle' | 'online' | 'error';
+export interface ProjectInfo {type: 'project-info'; expo: boolean; reactNative: boolean;}
+export interface LaunchProgress {type: 'launch-progress'; busy: boolean; status: string;}
 
 export type HostMessage =
+	| {type: 'expo-preference'; enabled: boolean}
+	| {type: 'start-expo'; value: string}
+	| {type: 'scan-toggle'; enabled: boolean}
+	| {type: 'devtools-refresh'}
 	| { type: 'ready' | 'refresh' | 'stop' | 'close' | 'retry' }
 	| { type: 'client-error'; serverUrl: string; message: string; fatal: boolean }
 	| { type: 'start'; value: string }
@@ -37,7 +43,8 @@ export interface StatusMessage {
 }
 
 export interface SessionNotice { type: 'notice'; id: number; message: string; level: 'info' | 'error'; }
-export type ExtensionMessage = StatusMessage | SessionNotice | { type: 'targets'; targets: EmulatorTarget[] } | UploadReply | UploadProgress;
+export interface DevtoolsState {type: 'devtools'; active: boolean; enabled: boolean; connected: boolean;}
+export type ExtensionMessage = {type: 'expo-preference'; enabled: boolean} | ProjectInfo | LaunchProgress | import('./scan').ScanOutlines | DevtoolsState | StatusMessage | SessionNotice | { type: 'targets'; targets: EmulatorTarget[] } | UploadReply | UploadProgress;
 
 export interface DisplayState {
 	id: number;

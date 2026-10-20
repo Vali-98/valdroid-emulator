@@ -2,7 +2,9 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDownToLine, Copy, Pause, Play, Search, Send, Smartphone, Square, Trash2 } from 'lucide-react';
 import { bridge } from './bridge';
-import { consoleLimit, filterRecords, levelRank, type ConsoleMessage, type ConsoleRecord, type ConsoleState, type LogLevel } from '../../shared/console';
+import {JSConsole} from './JSConsole';
+import {jsLogLimit, type JSLog} from '../../shared/jsConsole';
+import { metroLogLimit, consoleLimit, filterRecords, levelRank, type ConsoleMessage, type ConsoleRecord, type ConsoleState, type LogLevel } from '../../shared/console';
 
 const levelNames: Record<LogLevel, string> = { V: 'Verbose', D: 'Debug', I: 'Info', W: 'Warning', E: 'Error', F: 'Fatal' };
 
@@ -20,6 +22,17 @@ function Highlight({ text, search }: { text: string; search: string }) {
 }
 
 export function ConsoleApp() {
+	const [projectTools, setProjectTools] = useState(false);
+	const [metroText, setMetroText] = useState('');
+	const [jsRecords, setJSRecords] = useState<JSLog[]>([]);
+	const [tab, setTab] = useState<'logcat' | 'metro' | 'js'>(() => bridge.getState()?.tab ?? 'logcat');
+	const activeTab = projectTools ? tab : 'logcat';
+	const metroViewport = useRef<HTMLPreElement>(null);
+	const metroFollow = useRef(true);
+	useEffect(() => {
+		const element = metroViewport.current;
+		if (element && metroFollow.current) {element.scrollTop = element.scrollHeight;}
+	}, [metroText, tab]);
 	const [records, setRecords] = useState<ConsoleRecord[]>([]);
 	const [state, setState] = useState<ConsoleState>({ streaming: false, busy: false, packages: [], processes: {} });
 	const [preferences, setPreferences] = useState(() => {
@@ -40,6 +53,11 @@ export function ConsoleApp() {
 		const receive = (event: MessageEvent<ConsoleMessage>) => {
 			const message = event.data;
 			switch (message.type) {
+				case 'js-snapshot': setJSRecords(message.records); break;
+				case 'js-records': setJSRecords(previous => [...previous, ...message.records].filter(record => record.id >= (message.oldestID ?? 0)).slice(-jsLogLimit)); break;
+				case 'project-info': setProjectTools(message.expo || message.reactNative); break;
+				case 'metro-snapshot': setMetroText(message.text); if (message.focus) {setTab('metro');} break;
+				case 'metro-output': setMetroText(previous => (previous + message.text).slice(-metroLogLimit)); break;
 				case 'console-snapshot': setState(message.state); setRecords(message.records); break;
 				case 'console-state': setState(message.state); break;
 				case 'console-records': setRecords(previous => [...previous, ...message.records].slice(-consoleLimit)); break;
@@ -62,6 +80,18 @@ export function ConsoleApp() {
 		historyIndex.current = -1; setCommand(''); setFollow(true);
 	};
 	return <main className="console-app">
+		{projectTools && <nav className="console-tabs" role="tablist" aria-label="Valdroid logs">
+			{(['logcat', 'metro', 'js'] as const).map(value => <button key={value} role="tab" aria-selected={activeTab === value} onClick={() => {setTab(value); bridge.setState({...bridge.getState(), tab: value});}}>{value === 'metro' ? 'Metro' : value === 'js' ? 'JS Console' : 'Logcat'}</button>)}
+		</nav>}
+		{projectTools && <JSConsole records={jsRecords} hidden={activeTab !== 'js'} />}
+		{activeTab === 'metro' && <section className="metro-panel" role="tabpanel" aria-label="Metro">
+			<header className="console-toolbar"><span>Expo build / Metro</span><div className="console-actions">
+				<button aria-label="Copy Metro logs" onClick={() => bridge.postMessage({type: 'console-copy', text: metroText})}><Copy size={15} /></button>
+				<button aria-label="Clear Metro logs" onClick={() => bridge.postMessage({type: 'metro-clear'})}><Trash2 size={15} /></button>
+			</div></header>
+			<pre className="metro-log" ref={metroViewport} onScroll={event => {const el = event.currentTarget; metroFollow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;}}>{metroText || 'Start Expo with Emulator to view build and Metro output.'}</pre>
+		</section>}
+		<div className="logcat-panel" hidden={activeTab !== 'logcat'}>
 		<header className="console-toolbar">
 			<span className="console-device" title={state.serial ?? 'No emulator loaded'}><Smartphone size={15} /><span>{state.serial ?? 'No emulator loaded'}</span></span>
 			<select aria-label="Package" value={packageName} onChange={event => updatePreferences({packageName: event.target.value})}>
@@ -106,5 +136,6 @@ export function ConsoleApp() {
 			{state.busy ? <button type="button" title="Cancel command" aria-label="Cancel command" onClick={() => bridge.postMessage({ type: 'console-cancel' })}><Square size={15} /></button> : <button title="Run command" aria-label="Run command" disabled={!state.serial || !command.trim()}><Send size={15} /></button>}
 		</form>
 		<footer className="console-footer"><span className={state.streaming ? 'log-live' : ''}>{state.streaming ? 'Logcat live' : 'Logcat stopped'}</span><span>{filtered.length.toLocaleString()} / {records.length.toLocaleString()}</span></footer>
+		</div>
 	</main>;
 }

@@ -26,6 +26,8 @@ const esbuildProblemMatcherPlugin = {
 };
 
 async function main() {
+	await esbuild.build({entryPoints: ['src/runtime/expoReporter.cjs'], bundle: true, platform: 'node', format: 'cjs', outfile: 'dist/expo-reporter.cjs'});
+	const scan = await esbuild.build({entryPoints: ['src/runtime/reactScan.js'], bundle: true, platform: 'browser', external: ['react-native'], format: 'cjs', outfile: 'dist/react-scan-runtime.js', metafile: true});
 	const shared = {
 		bundle: true,
 		metafile: true,
@@ -74,7 +76,7 @@ async function main() {
 		const webview = await webviewCtx.rebuild();
 		const consoleView = await consoleCtx.rebuild();
 		fs.writeFileSync('dist/THIRD_PARTY_NOTICES.txt', dependencyNotices([
-			extension.metafile, webview.metafile, consoleView.metafile,
+			extension.metafile, webview.metafile, consoleView.metafile, scan.metafile,
 		]));
 		await extensionCtx.dispose();
 		await webviewCtx.dispose();

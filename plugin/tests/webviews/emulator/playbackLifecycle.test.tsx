@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { EmulatorScreen } from '../../../src/webviews/emulator/components/EmulatorScreen';
 
@@ -29,4 +29,14 @@ it('releases every playback instance during Strict Mode setup/cleanup and unmoun
 	expect(media.start.mock.calls.length - media.stops.filter(stop => stop.mock.calls.length > 0).length).toBe(1);
 	unmount();
 	for (const stop of media.stops) {expect(stop).toHaveBeenCalledOnce();}
+});
+
+it('keeps the loader visible over a playing stream until the Expo build finishes', () => {
+	const initial = props();
+	const {rerender} = render(<EmulatorScreen {...initial} launchStatus="Building app…" />);
+	expect(screen.getByRole('progressbar')).toBeTruthy();
+	expect(screen.getByText('Building app…')).toBeTruthy();
+	rerender(<EmulatorScreen {...initial} />);
+	expect(screen.queryByRole('progressbar')).toBeNull();
+	expect(media.start).toHaveBeenCalledOnce();
 });

@@ -4,6 +4,9 @@ import { resolveAndroidTools } from './host/adb/toolPaths';
 import { listTargets } from './host/adb/targets';
 import { EmulatorViewProvider } from './host/views/EmulatorViewProvider';
 import { ConsoleViewProvider } from './host/views/ConsoleViewProvider';
+import { ExpoSession } from './host/reactNative/ExpoSession';
+import { ReactScanIntegration } from './host/reactNative/ReactScanIntegration';
+import {detectProjects} from './host/reactNative/projectDetection';
 
 let shutdownExtension: (() => Promise<void>) | undefined;
 let shutdownConsole: (() => Promise<void>) | undefined;
@@ -22,13 +25,51 @@ export function activate(context: vscode.ExtensionContext): void {
 	const console = new ConsoleViewProvider(context, adbPath);
 	shutdownConsole = () => console.dispose();
 	let session: EmulatorSession;
-	const provider = new EmulatorViewProvider(context, discover, value => session.startTarget(value), () => session.stop(),
+	let startingExpo = false;
+	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records));
+	const stop = async () => {await expo.stop(); await session.stop();};
+	const provider = new EmulatorViewProvider(context, discover, async value => {await expo.stop(); await session.startTarget(value);}, stop,
 		() => session.deviceSerial, (file, name, serial, signal, progress) => session.transferFile(file, name, serial, signal, progress), output,
-		reason => session.disconnect(reason));
+		async reason => {await expo.stop(); await session.disconnect(reason);}, {
+			start: async value => {
+				if (startingExpo) {return;}
+				startingExpo = true;
+				try {
+					if (!vscode.workspace.isTrusted) {throw new Error('Trust this workspace before starting Expo.');}
+					const folders = vscode.workspace.workspaceFolders ?? [];
+					const folder = folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick({placeHolder: 'Select the Expo project'});
+					if (!folder) {throw new Error('Open an Expo project folder in VS Code first.');}
+					await ReactScanIntegration.inspect(folder.uri.fsPath);
+					await expo.stop();
+					console.showMetro();
+					await vscode.commands.executeCommand('workbench.view.extension.valdroidConsole');
+					provider.setLaunchProgress('Starting emulator…');
+					await session.startTarget(value);
+					const serial = session.deviceSerial;
+					if (!serial) {throw new Error('No connected Android device.');}
+					provider.setLaunchProgress('Starting Metro…');
+					await expo.start(folder.uri.fsPath, serial);
+				} finally {startingExpo = false;}
+			},
+			toggle: enabled => expo.setScan(enabled), state: () => expo.state,
+		});
 	session = new EmulatorSession(context.extensionPath, adbPath, emulatorPath, bitRate, output, provider, serial => console.setDevice(serial));
-	shutdownExtension = async () => {await provider.cancelUploads(); await session.stop();};
+	shutdownExtension = async () => {await provider.cancelUploads(); await stop();};
+	let detectionVersion = 0;
+	const refreshProjectInfo = async () => {
+		const version = ++detectionVersion;
+		const info = await detectProjects((vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.fsPath));
+		if (version === detectionVersion) {provider.setProjectInfo(info); console.setProjectInfo(info);}
+	};
+	const manifests = vscode.workspace.createFileSystemWatcher('**/package.json');
+	const manifestChanged = (uri: vscode.Uri) => {
+		if ((vscode.workspace.workspaceFolders ?? []).some(folder => vscode.Uri.joinPath(folder.uri, 'package.json').toString() === uri.toString())) {void refreshProjectInfo();}
+	};
+	void refreshProjectInfo();
 
 	context.subscriptions.push(
+		manifests, manifests.onDidCreate(manifestChanged), manifests.onDidChange(manifestChanged), manifests.onDidDelete(manifestChanged),
+		vscode.workspace.onDidChangeWorkspaceFolders(() => {void refreshProjectInfo();}),
 		output,
 		vscode.commands.registerCommand('valdroid-emulator.settings', () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:Vali-98.valdroid-emulator')),
 		vscode.workspace.onDidChangeConfiguration(event => {

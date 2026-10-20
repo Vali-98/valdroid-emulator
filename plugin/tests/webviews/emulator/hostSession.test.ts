@@ -56,6 +56,29 @@ it('ignores unrelated window messages', () => {
 	receive({ type: 'unrelated' }); expect(result.current.session).toBe(initial);
 });
 
+it('restores and saves the workspace Expo preference without resetting during launch', () => {
+	const {result} = renderHook(useHostSession);
+	receive({type: 'expo-preference', enabled: true});
+	receive({type: 'status', state: 'online', status: 'Starting', serverUrl: 'http://localhost'});
+	receive({type: 'status', state: 'idle', status: 'Stopped'});
+	expect(result.current.launchWithExpo).toBe(true);
+	act(() => result.current.setLaunchWithExpo(false));
+	expect(bridge.postMessage).toHaveBeenLastCalledWith({type: 'expo-preference', enabled: false});
+	expect(result.current.launchWithExpo).toBe(false);
+});
+
+it('shows Expo loading immediately and keeps it active when streaming is already connected', () => {
+	const {result} = renderHook(useHostSession);
+	act(() => result.current.selectTarget('avd:Phone'));
+	act(() => result.current.startExpo());
+	expect(result.current.launch.busy).toBe(true);
+	receive({type: 'status', state: 'online', status: 'Connected', serverUrl: 'http://localhost'});
+	receive({type: 'launch-progress', busy: true, status: 'Building app…'});
+	expect(result.current.launch).toMatchObject({busy: true, status: 'Building app…'});
+	receive({type: 'launch-progress', busy: false, status: ''});
+	expect(result.current.launch.busy).toBe(false);
+});
+
 it('keeps a disconnect notice after returning to the picker and sends load retries', () => {
 	const {result} = renderHook(useHostSession);
 	receive({type: 'status', state: 'online', status: 'Connected', serverUrl: 'http://localhost'});

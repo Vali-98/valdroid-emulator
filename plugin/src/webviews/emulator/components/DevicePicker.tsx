@@ -1,20 +1,27 @@
 import { Play } from 'lucide-react';
 import * as React from 'react';
 import type { EmulatorTarget } from '../../../shared/protocol';
+import {Switch} from './Switch';
 
-export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, error }: {
+export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, onStartExpo, project, error, launchWithExpo: savedLaunchWithExpo, onLaunchWithExpoChange }: {
+	launchWithExpo?: boolean;
+	onLaunchWithExpoChange?: (enabled: boolean) => void;
+	project?: {expo: boolean; reactNative: boolean};
 	targets: EmulatorTarget[];
 	selected: string;
 	onSelect: (value: string) => void;
 	onRefresh: () => void;
 	onStart: () => void;
+	onStartExpo?: () => void;
 	error?: string;
 }) {
+	const [localLaunchWithExpo, setLocalLaunchWithExpo] = React.useState(false);
+	const launchWithExpo = savedLaunchWithExpo ?? localLaunchWithExpo;
+	const setLaunchWithExpo = (enabled: boolean) => {setLocalLaunchWithExpo(enabled); onLaunchWithExpoChange?.(enabled);};
 	React.useEffect(() => {
 		const timer = window.setInterval(onRefresh, 3000);
 		return () => window.clearInterval(timer);
 	}, [onRefresh]);
-	const action = selected.startsWith('device:') ? 'Connect to device' : 'Start emulator';
 	const abi = targets.find(target => target.value === selected)?.abi;
 	return <div className="empty">
 		<div className="device-picker">
@@ -25,7 +32,10 @@ export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, 
 					{target.label}{target.value.startsWith('device:') ? ' (running)' : ''}
 				</option>)}
 			</select>
-			<button type="button" className="play-button" disabled={!selected} onClick={onStart} aria-label={action} title={action}><Play size={18} fill="currentColor" /></button>
+			<div className="project-start-actions">
+				<button type="button" className="project-start-button" disabled={!selected} onClick={project?.expo && launchWithExpo && onStartExpo ? onStartExpo : onStart}><Play size={16} fill="currentColor" />Start Emulator</button>
+				{project?.expo && <Switch label="Launch with Expo" checked={launchWithExpo} onChange={setLaunchWithExpo} disabled={!onStartExpo} />}
+			</div>
 		</div>
 		{(abi === 'x86' || abi === 'x86_64') && <p className="device-performance-warning">
 			Performance may be poor on x86 devices. ARM devices are recommended.

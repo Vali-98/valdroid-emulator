@@ -4,6 +4,7 @@ import { startAVCVideo, type VideoStats } from '../media/avcVideo';
 import { useEmulatorInput } from '../hooks/useEmulatorInput';
 import { LoadingState } from './DevicePicker';
 import { vscode } from '../../shared/vscode';
+import { ScanOverlay } from './ScanOverlay';
 
 interface PlaybackProps {
 	serverUrl: string;
@@ -29,7 +30,9 @@ function PlaybackCanvas({serverUrl, display, send, onStatus, onStats}: PlaybackP
 		id="screen" aria-label="Android emulator display" draggable={false} tabIndex={0} />;
 }
 
-export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, ...playback}: PlaybackProps & {
+export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, scanEnabled = false, launchStatus, ...playback}: PlaybackProps & {
+	launchStatus?: string;
+	scanEnabled?: boolean;
 	status: string;
 	attempt: number;
 	onRestart: () => void;
@@ -38,6 +41,7 @@ export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, 
 }) {
 	return <div className="screen-frame">
 		<PlaybackCanvas key={attempt} {...playback} />
-		{status !== 'Playing' && <LoadingState status={status} startedAt={startedAt} onRetry={onRetry ?? onRestart} />}
+		<ScanOverlay enabled={scanEnabled} />
+		{(status !== 'Playing' || launchStatus) && <LoadingState status={launchStatus ?? status} startedAt={startedAt} onRetry={launchStatus ? undefined : onRetry ?? onRestart} />}
 	</div>;
 }

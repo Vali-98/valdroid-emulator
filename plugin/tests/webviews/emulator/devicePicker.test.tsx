@@ -26,10 +26,10 @@ it('marks running devices in a flat list and describes the selected action', () 
 	expect(screen.getByRole('option', {name: 'Phone (emulator-5554) (running)'})).toBeTruthy();
 	expect(screen.getByRole('option', {name: 'Other phone'})).toBeTruthy();
 	expect(screen.queryByRole('group')).toBeNull();
-	fireEvent.click(screen.getByRole('button', {name: 'Connect to device'}));
+	fireEvent.click(screen.getByRole('button', {name: 'Start Emulator'}));
 	expect(props.onStart).toHaveBeenCalledOnce();
 	rerender(<DevicePicker {...props} selected="avd:Other" />);
-	expect(screen.getByRole('button', {name: 'Start emulator'})).toBeTruthy();
+	expect(screen.getByRole('button', {name: 'Start Emulator'})).toBeTruthy();
 });
 
 it('refreshes connected devices automatically and stops refreshing after unmount', () => {
@@ -43,4 +43,21 @@ it('refreshes connected devices automatically and stops refreshing after unmount
 		vi.advanceTimersByTime(3000);
 		expect(onRefresh).toHaveBeenCalledTimes(2);
 	} finally {vi.useRealTimers();}
+});
+
+it('uses one start action and routes it through Expo only when its switch is enabled', () => {
+	const props = {targets: [{label: 'Phone', value: 'avd:Phone'}], selected: 'avd:Phone', onSelect: vi.fn(), onRefresh: vi.fn(), onStart: vi.fn(), onStartExpo: vi.fn()};
+	const {rerender, container} = render(<DevicePicker {...props} project={{expo: true, reactNative: true}} />);
+	expect(container.querySelector('.device-picker .play-button')).toBeNull();
+	expect(container.querySelector('.device-picker .project-start-actions')).toBeTruthy();
+	fireEvent.click(screen.getByRole('button', {name: 'Start Emulator'}));
+	expect(props.onStart).toHaveBeenCalledOnce();
+	fireEvent.click(screen.getByRole('switch', {name: 'Launch with Expo'}));
+	fireEvent.click(screen.getByRole('button', {name: 'Start Emulator'}));
+	expect(props.onStartExpo).toHaveBeenCalledOnce();
+	rerender(<DevicePicker {...props} project={{expo: false, reactNative: false}} />);
+	expect(screen.queryByRole('switch')).toBeNull();
+	expect(screen.getAllByRole('button')).toHaveLength(1);
+	fireEvent.click(screen.getByRole('button', {name: 'Start Emulator'}));
+	expect(props.onStart).toHaveBeenCalledTimes(2);
 });
