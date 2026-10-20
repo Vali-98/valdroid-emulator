@@ -1,6 +1,6 @@
 import type { ConsoleRequest } from '../../shared/console';
 
-interface ConsolePreferences { tab?: 'logcat' | 'metro' | 'js'; level?: string; packageName?: string; search?: string; history?: string[]; }
+interface ConsolePreferences { tab?: 'logcat' | 'metro' | 'js' | 'hierarchy'; hierarchyPropsWidth?: number; level?: string; packageName?: string; search?: string; history?: string[]; }
 declare function acquireVsCodeApi(): {
 	postMessage(message: ConsoleRequest): void;
 	getState(): ConsolePreferences | undefined;

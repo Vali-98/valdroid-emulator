@@ -12,6 +12,7 @@ import {parseJSLogs, type JSLog} from '../../shared/jsConsole';
 import {parseInspectorResult, type InspectorRequest, type InspectorResult} from '../../shared/inspector';
 import {resolveInspectorElements, localInspectorSource} from './inspectorSource';
 import {MetroInjection} from './MetroInjection';
+import {parseHierarchySnapshot, parseHierarchyHighlight, validHierarchyId, type HierarchyControl, type HierarchySnapshot, type HierarchyHighlight} from '../../shared/hierarchy';
 
 export class ExpoSession {
 	private processes?: ExpoProcesses;
@@ -25,7 +26,8 @@ export class ExpoSession {
 	private inspectRequest?: InspectorRequest;
 	private inspectResult?: InspectorResult;
 	private injection?: MetroInjection;
-	constructor(private readonly extensionPath: string, private readonly adbPath: string, private readonly log: (text: string) => void = () => undefined, private readonly onOutlines: (batch: ScanOutlines) => void = () => undefined, private readonly onProgress: (status: string) => void = () => undefined, private readonly onJSLogs: (records: Omit<JSLog, 'id'>[]) => void = () => undefined, private readonly onInspection: (result: InspectorResult) => void = () => undefined, private readonly storagePath: string = path.join(os.tmpdir(), 'valdroid-metro')) {}
+	private hierarchy: HierarchyControl = {active: false, version: 0};
+	constructor(private readonly extensionPath: string, private readonly adbPath: string, private readonly log: (text: string) => void = () => undefined, private readonly onOutlines: (batch: ScanOutlines) => void = () => undefined, private readonly onProgress: (status: string) => void = () => undefined, private readonly onJSLogs: (records: Omit<JSLog, 'id'>[]) => void = () => undefined, private readonly onInspection: (result: InspectorResult) => void = () => undefined, private readonly storagePath: string = path.join(os.tmpdir(), 'valdroid-metro'), private readonly onHierarchy: (snapshot: HierarchySnapshot) => void = () => undefined, private readonly onHierarchyHighlight: (highlight: HierarchyHighlight) => void = () => undefined) {}
 
 	async start(root: string, serial: string): Promise<void> {
 		await this.stop();
@@ -52,6 +54,10 @@ export class ExpoSession {
 					if (response.writableEnded) {return;}
 					try {
 						const event: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+						const tree = parseHierarchySnapshot(event);
+						if (tree) {if (this.hierarchy.active && tree.version === this.hierarchy.version) {this.onHierarchy(tree);} response.writeHead(204).end(); return;}
+						const highlight = parseHierarchyHighlight(event);
+						if (highlight) {if (this.hierarchy.active && this.hierarchy.hoveredId && highlight.id === this.hierarchy.hoveredId) {this.onHierarchyHighlight(highlight);} response.writeHead(204).end(); return;}
 						const inspection = parseInspectorResult(event);
 						if (inspection) {
 							response.writeHead(204).end();
@@ -73,7 +79,7 @@ export class ExpoSession {
 			this.connectedAt = Date.now();
 			signalAppReady();
 			response.writeHead(200, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'});
-			response.end(JSON.stringify({enabled: this.enabled, inspect: this.inspectRequest}));
+			response.end(JSON.stringify({enabled: this.enabled, inspect: this.inspectRequest, hierarchy: this.hierarchy}));
 		});
 		await new Promise<void>((resolve, reject) => {server.once('error', reject); server.listen(0, '127.0.0.1', resolve);});
 		this.server = server;
@@ -105,10 +111,31 @@ export class ExpoSession {
 		if (!this.project || !Number.isSafeInteger(request.id) || request.id < 1 || ![request.x, request.y].every(n => Number.isFinite(n) && n >= 0 && n <= 1)) {return;}
 		this.inspectRequest = request;
 	}
+	setHierarchyActive(active: boolean): void {
+		this.hierarchy = {...this.hierarchy, active, hoveredId: undefined, version: this.hierarchy.version + 1};
+		this.clearHierarchyHighlight();
+		if (active && !this.project) {this.onHierarchy({type: 'hierarchy-snapshot', nodes: [], error: 'Start an Expo session to inspect its React hierarchy.'});}
+	}
+	selectHierarchy(id?: string): void {
+		if (id !== undefined && !validHierarchyId(id)) {return;}
+		this.hierarchy = {...this.hierarchy, selectedId: id, version: this.hierarchy.version + 1};
+	}
+	hoverHierarchy(id?: string): void {
+		if (id !== undefined && !validHierarchyId(id)) {return;}
+		this.hierarchy = {...this.hierarchy, hoveredId: id};
+		if (!id) {this.clearHierarchyHighlight();}
+	}
+	refreshHierarchy(): void {this.hierarchy.version++;}
+	searchHierarchy(query: string): void {this.hierarchy = {...this.hierarchy, query: query.slice(0, 200), version: this.hierarchy.version + 1};}
+	private clearHierarchyHighlight(): void {this.onHierarchyHighlight({type: 'hierarchy-highlight', width: 1, height: 1});}
+	inspectorHierarchyId(id: number, index: number): string | undefined {
+		if (!this.project || id !== this.inspectResult?.id || !Number.isSafeInteger(index) || index < 0) {return;}
+		return this.inspectResult.elements[index]?.fiberId;
+	}
 	private async receiveInspection(root: string, result: InspectorResult): Promise<void> {
 		if (result.id !== this.inspectRequest?.id) {return;}
 		// Highlight immediately; source-map resolution must not make hovering laggy.
-		this.inspectResult = {...result, elements: result.elements.map(({name}) => ({name}))};
+		this.inspectResult = {...result, elements: result.elements.map(({name, fiberId}) => ({name, fiberId}))};
 		this.onInspection(this.inspectResult);
 		if (!this.inspectRequest?.select) {return;}
 		const elements = await resolveInspectorElements(root, this.metroPort, result.elements);
@@ -133,6 +160,9 @@ export class ExpoSession {
 		await this.processes?.stop(); this.processes = undefined;
 		this.enabled = false; this.connectedAt = 0;
 		this.inspectRequest = undefined; this.inspectResult = undefined;
+		this.hierarchy = {...this.hierarchy, selectedId: undefined, hoveredId: undefined, version: this.hierarchy.version + 1};
+		this.clearHierarchyHighlight();
+		this.onHierarchy({type: 'hierarchy-snapshot', nodes: [], error: 'No running Expo app.'});
 		if (this.server) {this.server.closeAllConnections(); await new Promise<void>(resolve => this.server!.close(() => resolve())); this.server = undefined;}
 		if (this.serial && this.port) {await runFile(this.adbPath, ['-s', this.serial, 'reverse', '--remove', `tcp:${this.port}`]).catch(() => undefined);}
 		if (this.serial && this.metroPort) {await runFile(this.adbPath, ['-s', this.serial, 'reverse', '--remove', `tcp:${this.metroPort}`]).catch(() => undefined);}

@@ -3,7 +3,7 @@ import {Copy, Search, Trash2} from 'lucide-react';
 import type {JSLog, JSValue} from '../../shared/jsConsole';
 import {bridge} from './bridge';
 
-function ValueTree({value, property}: {value: JSValue; property?: string}) {
+export function ValueTree({value, property}: {value: JSValue; property?: string}) {
 	const [open, setOpen] = useState(false);
 	const prefix = property === undefined ? null : <span className="js-property">{property}: </span>;
 	const preview = <span className={`js-value js-${value.type}`}>{value.type === 'string' && property !== undefined ? JSON.stringify(value.preview) : value.preview}</span>;

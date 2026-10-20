@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDownToLine, Copy, Pause, Play, Search, Send, Smartphone, Square, Trash2 } from 'lucide-react';
 import { bridge } from './bridge';
@@ -7,6 +7,7 @@ import {jsLogLimit, type JSLog} from '../../shared/jsConsole';
 import { metroLogLimit, consoleLimit, filterRecords, levelRank, type ConsoleMessage, type ConsoleRecord, type ConsoleState, type LogLevel } from '../../shared/console';
 
 const levelNames: Record<LogLevel, string> = { V: 'Verbose', D: 'Debug', I: 'Info', W: 'Warning', E: 'Error', F: 'Fatal' };
+const Hierarchy = lazy(() => import('./Hierarchy.js').then(module => ({default: module.Hierarchy})));
 
 function Highlight({ text, search }: { text: string; search: string }) {
 	if (!search) { return <>{text}</>; }
@@ -25,7 +26,8 @@ export function ConsoleApp() {
 	const [projectTools, setProjectTools] = useState(false);
 	const [metroText, setMetroText] = useState('');
 	const [jsRecords, setJSRecords] = useState<JSLog[]>([]);
-	const [tab, setTab] = useState<'logcat' | 'metro' | 'js'>(() => bridge.getState()?.tab ?? 'logcat');
+	const [tab, setTab] = useState<'logcat' | 'metro' | 'js' | 'hierarchy'>(() => bridge.getState()?.tab ?? 'logcat');
+	const [hierarchyFocus, setHierarchyFocus] = useState<{id: string; version: number}>();
 	const activeTab = projectTools ? tab : 'logcat';
 	const metroViewport = useRef<HTMLPreElement>(null);
 	const metroFollow = useRef(true);
@@ -43,7 +45,7 @@ export function ConsoleApp() {
 	const {level, packageName, search, history} = preferences;
 	const updatePreferences = (change: Partial<typeof preferences>) => {
 		const next = {...preferences, ...change};
-		setPreferences(next); bridge.setState(next);
+		setPreferences(next); bridge.setState({...bridge.getState(), ...next});
 	};
 	const [command, setCommand] = useState('');
 	const historyIndex = useRef(-1);
@@ -53,6 +55,7 @@ export function ConsoleApp() {
 		const receive = (event: MessageEvent<ConsoleMessage>) => {
 			const message = event.data;
 			switch (message.type) {
+				case 'hierarchy-focus': setHierarchyFocus(previous => ({id: message.id, version: (previous?.version ?? 0) + 1})); setTab('hierarchy'); break;
 				case 'js-snapshot': setJSRecords(message.records); break;
 				case 'js-records': setJSRecords(previous => [...previous, ...message.records].filter(record => record.id >= (message.oldestID ?? 0)).slice(-jsLogLimit)); break;
 				case 'project-info': setProjectTools(message.expo || message.reactNative); break;
@@ -81,9 +84,10 @@ export function ConsoleApp() {
 	};
 	return <main className="console-app">
 		{projectTools && <nav className="console-tabs" role="tablist" aria-label="Valdroid logs">
-			{(['logcat', 'metro', 'js'] as const).map(value => <button key={value} role="tab" aria-selected={activeTab === value} onClick={() => {setTab(value); bridge.setState({...bridge.getState(), tab: value});}}>{value === 'metro' ? 'Metro' : value === 'js' ? 'JS Console' : 'Logcat'}</button>)}
+			{(['logcat', 'metro', 'js', 'hierarchy'] as const).map(value => <button key={value} role="tab" aria-selected={activeTab === value} onClick={() => {setHierarchyFocus(undefined); setTab(value); bridge.setState({...bridge.getState(), tab: value});}}>{value === 'metro' ? 'Metro' : value === 'js' ? 'JS Console' : value === 'hierarchy' ? 'Hierarchy' : 'Logcat'}</button>)}
 		</nav>}
 		{projectTools && <JSConsole records={jsRecords} hidden={activeTab !== 'js'} />}
+		{activeTab === 'hierarchy' && <Suspense fallback={<p className="console-empty">Loading hierarchy…</p>}><Hierarchy focusId={hierarchyFocus?.id} focusVersion={hierarchyFocus?.version} /></Suspense>}
 		{activeTab === 'metro' && <section className="metro-panel" role="tabpanel" aria-label="Metro">
 			<header className="console-toolbar"><span>Expo build / Metro</span><div className="console-actions">
 				<button aria-label="Copy Metro logs" onClick={() => bridge.postMessage({type: 'console-copy', text: metroText})}><Copy size={15} /></button>

@@ -79,6 +79,9 @@ export function startScan(controlURL) {
     try {
       const response = await fetch(controlURL);
       const state = await response.json();
+      for (const event of await inspect.hierarchy(state.hierarchy)) {
+        await fetch(controlURL, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(event)});
+      }
       if (state.inspect && state.inspect.id > inspectedId) {
         inspectedId = state.inspect.id;
         const result = await inspect(state.inspect);

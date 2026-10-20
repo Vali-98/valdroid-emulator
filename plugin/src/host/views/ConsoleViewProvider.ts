@@ -4,6 +4,7 @@ import { metroLogLimit, type ConsoleMessage, type ConsoleRequest } from '../../s
 import { webviewHtml } from './html';
 import type {ProjectInfo} from '../../shared/protocol';
 import {jsLogLimit, type JSLog} from '../../shared/jsConsole';
+import {validHierarchyId, type HierarchySnapshot} from '../../shared/hierarchy';
 
 export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
@@ -14,6 +15,18 @@ export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 	private jsID = 0;
 	private jsSizes: number[] = [];
 	private jsSize = 0;
+	private hierarchyRequested = false;
+	private hierarchyFocus?: string;
+	private hierarchySnapshot: HierarchySnapshot = {type: 'hierarchy-snapshot', nodes: []};
+	private hierarchyHandlers?: {active: (active: boolean) => void; select: (id?: string) => void; hover: (id?: string) => void; refresh: () => void; search?: (query: string) => void};
+	setHierarchyHandlers(handlers: NonNullable<ConsoleViewProvider['hierarchyHandlers']>): void {this.hierarchyHandlers = handlers;}
+	postHierarchy(snapshot: HierarchySnapshot): void {this.hierarchySnapshot = snapshot; if (this.hierarchyRequested && this.view?.visible) {this.post(snapshot);}}
+	showHierarchy(id: string): void {
+		this.hierarchyRequested = true; this.hierarchyFocus = id; this.metroRequested = false;
+		this.hierarchyHandlers?.select(id); this.updateHierarchyVisibility();
+		this.post({type: 'hierarchy-focus', id});
+	}
+	private updateHierarchyVisibility(): void {this.hierarchyHandlers?.active(this.hierarchyRequested && Boolean(this.view?.visible));}
 	appendJS(records: Omit<JSLog, 'id'>[]): void {
 		const added = records.map(record => ({...record, id: ++this.jsID}));
 		this.jsRecords.push(...added);
@@ -44,7 +57,14 @@ export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 		const messages = view.webview.onDidReceiveMessage(async (message: ConsoleRequest) => {
 			try {
 				switch (message.type) {
-					case 'console-ready': this.post(this.console.snapshot()); this.post(this.projectInfo); this.post({type: 'metro-snapshot', text: this.metroText, focus: this.metroRequested}); this.post({type: 'js-snapshot', records: this.jsRecords}); break;
+					case 'hierarchy-search': if (typeof message.query === 'string') {this.hierarchyHandlers?.search?.(message.query.slice(0, 200));} break;
+					case 'hierarchy-active':
+						if (typeof message.active === 'boolean') {this.hierarchyRequested = message.active; this.updateHierarchyVisibility(); if (message.active) {this.post(this.hierarchySnapshot);}}
+						break;
+					case 'hierarchy-select': if (message.id === undefined || validHierarchyId(message.id)) {this.hierarchyFocus = undefined; this.hierarchyHandlers?.select(message.id);} break;
+					case 'hierarchy-hover': if (message.id === undefined || validHierarchyId(message.id)) {this.hierarchyHandlers?.hover(message.id);} break;
+					case 'hierarchy-refresh': this.hierarchyHandlers?.refresh(); break;
+					case 'console-ready': this.post(this.console.snapshot()); this.post(this.projectInfo); this.post({type: 'metro-snapshot', text: this.metroText, focus: this.metroRequested}); this.post({type: 'js-snapshot', records: this.jsRecords}); if (this.hierarchyFocus) {this.post({type: 'hierarchy-focus', id: this.hierarchyFocus});} break;
 					case 'js-clear': this.jsRecords = []; this.jsSizes = []; this.jsSize = 0; this.post({type: 'js-snapshot', records: []}); break;
 					case 'metro-clear': this.metroText = ''; this.post({type: 'metro-snapshot', text: ''}); break;
 					case 'console-command': if (typeof message.command === 'string') { await this.console.execute(message.command); } break;
@@ -55,7 +75,8 @@ export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 				}
 			} catch (error) { this.console.notice(error instanceof Error ? error.message : String(error), true); }
 		});
-		view.onDidDispose(() => { messages.dispose(); if (this.view === view) { this.view = undefined; void this.console.selectDevice(undefined); } });
+		const visibility = view.onDidChangeVisibility(() => this.updateHierarchyVisibility());
+		view.onDidDispose(() => { messages.dispose(); visibility.dispose(); if (this.view === view) { this.view = undefined; this.updateHierarchyVisibility(); void this.console.selectDevice(undefined); } });
 		void this.console.selectDevice(this.selectedSerial);
 	}
 	private post(message: ConsoleMessage): void { void this.view?.webview.postMessage(message); }

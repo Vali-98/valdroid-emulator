@@ -27,7 +27,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		private readonly transferFile: TransferFile,
 		private readonly output: vscode.OutputChannel,
 		private readonly disconnectStream?: (reason: string) => Promise<void>,
-		private readonly expo?: {start: (value: string) => Promise<void>; toggle: (enabled: boolean) => void; state: () => {active: boolean; enabled: boolean; connected: boolean}; inspect?: (request: import('../../shared/inspector').InspectorRequest) => void; openSource?: (id: number, index: number) => Promise<void>},
+		private readonly expo?: {start: (value: string) => Promise<void>; toggle: (enabled: boolean) => void; state: () => {active: boolean; enabled: boolean; connected: boolean}; inspect?: (request: import('../../shared/inspector').InspectorRequest) => void; openSource?: (id: number, index: number) => Promise<void>; showHierarchy?: (id: number, index: number) => Promise<void>},
 	) {}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -59,6 +59,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 					return;
 				}
 				switch (message.type) {
+					case 'inspect-show-hierarchy': await this.expo?.showHierarchy?.(message.id, message.index); break;
 					case 'inspect-point': this.expo?.inspect?.(message); break;
 					case 'inspect-open-source': await this.expo?.openSource?.(message.id, message.index); break;
 					case 'expo-preference':
@@ -150,6 +151,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	async cancelUploads(): Promise<void> {await this.uploads?.cancelAll();}
 	postOutlines(batch: import('../../shared/scan').ScanOutlines): void {this.postMessage(batch);}
 	postInspection(result: import('../../shared/inspector').InspectorResult): void {this.postMessage(result);}
+	postHierarchyHighlight(highlight: import('../../shared/hierarchy').HierarchyHighlight): void {this.postMessage(highlight);}
 
 	notify(message: string, level: 'info' | 'error'): void {
 		this.output.appendLine(`${level === 'error' ? 'Error' : 'Notice'}: ${message}`);

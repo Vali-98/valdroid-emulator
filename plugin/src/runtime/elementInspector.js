@@ -1,4 +1,5 @@
 import {Dimensions, Platform, StatusBar} from 'react-native';
+import {createHierarchy} from './hierarchy';
 
 const hostInstance = fiber => fiber?.stateNode?.canonical?.publicInstance ?? fiber?.stateNode?.canonical ?? fiber?.stateNode;
 export function inspectorTopInset() {
@@ -12,6 +13,13 @@ export function inspectorTopInset() {
 export function installElementInspector() {
   const hook = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__;
   const roots = new Map();
+  const hierarchy = createHierarchy(() => {
+    const mounted = new Set();
+    for (const [id] of hook?.renderers ?? []) {
+      for (const root of roots.get(id) ?? hook.getFiberRoots?.(id) ?? []) mounted.add(root);
+    }
+    return mounted;
+  }, inspectorTopInset);
   if (hook) {
     const previous = hook.onCommitFiberRoot;
     hook.onCommitFiberRoot = function(id, root, ...args) {
@@ -21,7 +29,7 @@ export function installElementInspector() {
       } finally {previous?.call(this, id, root, ...args);}
     };
   }
-  return async request => {
+  const inspect = async request => {
     const screen = Dimensions.get('screen');
     const result = {type: 'inspector-result', id: request.id, width: screen.width, height: screen.height, elements: []};
     try {
@@ -63,7 +71,7 @@ export function installElementInspector() {
             const name = type?.displayName ?? type?.name ?? type?.render?.displayName ?? type?.render?.name ?? (typeof type === 'string' ? type : null);
             if (name) {
               const source = fiber._debugSource;
-              result.elements.push({name: String(name).slice(0, 200),
+              result.elements.push({name: String(name).slice(0, 200), fiberId: hierarchy.getID(fiber),
                 ...(source?.fileName ? {source: {fileName: source.fileName, lineNumber: source.lineNumber, columnNumber: source.columnNumber ?? 1}} : {}),
                 ...(fiber._debugStack?.stack ? {stack: String(fiber._debugStack.stack).slice(0, 16000)} : {})});
             }
@@ -77,4 +85,6 @@ export function installElementInspector() {
     } catch (error) {result.error = String(error.message ?? error).slice(0, 500);}
     return result;
   };
+  inspect.hierarchy = hierarchy.update;
+  return inspect;
 }

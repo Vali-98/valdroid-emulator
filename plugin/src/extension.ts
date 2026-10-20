@@ -26,7 +26,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	shutdownConsole = () => console.dispose();
 	let session: EmulatorSession;
 	let startingExpo = false;
-	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records), result => provider.postInspection(result), context.globalStorageUri.fsPath);
+	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records), result => provider.postInspection(result), context.globalStorageUri.fsPath, snapshot => console.postHierarchy(snapshot), highlight => provider.postHierarchyHighlight(highlight));
+	console.setHierarchyHandlers({active: active => expo.setHierarchyActive(active), select: id => expo.selectHierarchy(id), hover: id => expo.hoverHierarchy(id), refresh: () => expo.refreshHierarchy(), search: query => expo.searchHierarchy(query)});
 	const stop = async () => {await expo.stop(); await session.stop();};
 	const provider = new EmulatorViewProvider(context, discover, async value => {await expo.stop(); await session.startTarget(value);}, stop,
 		() => session.deviceSerial, (file, name, serial, signal, progress) => session.transferFile(file, name, serial, signal, progress), output,
@@ -53,6 +54,12 @@ export function activate(context: vscode.ExtensionContext): void {
 			},
 			toggle: enabled => expo.setScan(enabled), state: () => expo.state,
 			inspect: request => expo.inspect(request),
+			showHierarchy: async (id, index) => {
+				const fiberId = expo.inspectorHierarchyId(id, index);
+				if (!fiberId) {provider.notify('This component is no longer available. Inspect it again.', 'info'); return;}
+				console.showHierarchy(fiberId);
+				await vscode.commands.executeCommand('valdroidConsole.view.focus');
+			},
 			openSource: async (id, index) => {
 				const source = await expo.inspectorSource(id, index);
 				if (!source) {provider.notify('Source location is unavailable for this component.', 'info'); return;}

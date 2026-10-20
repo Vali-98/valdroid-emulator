@@ -33,7 +33,7 @@ export class ExpoProcesses {
 		}
 		if (!ready) {throw new Error(`Metro did not become ready within 90 seconds at http://127.0.0.1:${port}/status. Last check: ${lastStatus}. See the Metro tab.`);}
 		this.log('\n[Valdroid] Metro ready. Building and installing Android app…\n');
-		this.onProgress('Building, installing and launching app…');
+		this.onProgress('Building…');
 		// Expo recognizes the existing project server on this port and reuses it.
 		// --no-bundler both conflicts with --port and falls back to port 8081.
 		const build = this.launch(root, cli, ['run:android', '--device', deviceName, '--port', String(port)], 'Build');

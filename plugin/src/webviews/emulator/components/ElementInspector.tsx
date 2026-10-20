@@ -135,6 +135,8 @@ export function InspectorOverlay({inspector}: {inspector: ReturnType<typeof useE
 	};
 	const scale = result ? Math.min(viewport.width / result.width, viewport.height / result.height) : 0;
 	const frame = result?.frame;
+	const mappedIndex = result?.elements.findIndex(element => element.fiberId && element.source) ?? -1;
+	const hierarchyIndex = mappedIndex >= 0 ? mappedIndex : result?.elements.findIndex(element => element.fiberId) ?? -1;
 	return <div ref={ref} className="inspector-overlay">
 		{frame && <div className="inspector-highlight" style={{left: (viewport.width - result!.width * scale) / 2 + frame.x * scale, top: (viewport.height - result!.height * scale) / 2 + frame.y * scale, width: frame.width * scale, height: frame.height * scale}} />}
 		{showPopup && <section ref={popupRef} className={`inspector-popup ${popup ? '' : 'inspector-tooltip'}`} style={position} aria-label={popup ? 'Component hierarchy' : 'Hovered component'}>
@@ -144,6 +146,7 @@ export function InspectorOverlay({inspector}: {inspector: ReturnType<typeof useE
 			{result?.error && <p role="status">{result.error}</p>}
 			{popup && result?.elements.map((element, index) => element.source && <button type="button" key={index} title={`${element.source.fileName}:${element.source.lineNumber}`} onClick={() => {vscode.postMessage({type: 'inspect-open-source', id: result.id, index}); dismiss();}}><span>{element.name}</span><small>{element.source.fileName.split('/').pop()}:{element.source.lineNumber}</small></button>)}
 			{popup && result?.resolved && !waiting && !result.error && !result.elements.some(element => element.source) && <p>No source-linked components at this position.</p>}
+			{popup && result && hierarchyIndex >= 0 && <button type="button" className="inspector-show-hierarchy" onClick={() => {vscode.postMessage({type: 'inspect-show-hierarchy', id: result.id, index: hierarchyIndex}); dismiss();}}>Show hierarchy</button>}
 		</section>}
 	</div>;
 }

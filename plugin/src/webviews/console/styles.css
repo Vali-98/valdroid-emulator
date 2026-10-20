@@ -75,3 +75,36 @@ button[aria-pressed=true]:hover { background: var(--valdroid-primary-hover); }
 .js-number, .js-bigint, .js-boolean { color: var(--vscode-debugTokenExpression-number, #b5cea8); }
 .js-property { color: var(--vscode-debugTokenExpression-name, #9cdcfe); }
 .js-truncated { opacity: .6; font-style: italic; }
+.hierarchy-panel { display: flex; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; }
+.hierarchy-content { display: grid; flex: 1; min-height: 0; min-width: 0; }
+.hierarchy-divider { display: grid; place-items: center; cursor: col-resize; touch-action: none; user-select: none; color: #777; background: #181818; background: color-mix(in srgb, var(--vscode-panel-background, #1e1e1e) 80%, #000); }
+.hierarchy-divider::after { content: ''; width: 2px; height: 2px; border-radius: 50%; background: currentColor; box-shadow: 0 -5px currentColor, 0 5px currentColor; pointer-events: none; }
+.hierarchy-divider:hover, .hierarchy-divider:focus-visible { color: #aaa; }
+.hierarchy-props { overflow: auto; padding: 8px; border-right: 1px solid var(--vscode-panel-border); font: 12px var(--vscode-editor-font-family, monospace); overflow-wrap: anywhere; }
+.hierarchy-props h3 { font-size: 12px; margin: 0 0 8px; }
+.hierarchy-props p { color: var(--vscode-descriptionForeground); }
+.hierarchy-values { display: flex; flex-direction: column; gap: 5px; }
+.hierarchy-tree-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.hierarchy-tree { flex: 1; overflow: auto; min-height: 0; min-width: 0; position: relative; scrollbar-gutter: stable; scrollbar-width: auto; }
+.hierarchy-tree::-webkit-scrollbar { width: 10px; height: 0; }
+.hierarchy-tree::-webkit-scrollbar:horizontal { display: none; height: 0; }
+.hierarchy-horizontal-scrollbar { appearance: none; -webkit-appearance: none; display: block; width: 100%; height: 14px; flex: 0 0 14px; margin: 0; padding: 0; border: 0; border-radius: 0; background: var(--vscode-panel-background, #1e1e1e); cursor: default; }
+.hierarchy-horizontal-scrollbar:focus, .hierarchy-horizontal-scrollbar:focus-visible { outline: none; box-shadow: none; }
+.hierarchy-horizontal-scrollbar::-webkit-slider-runnable-track { height: 14px; background: var(--vscode-panel-background, #1e1e1e); }
+.hierarchy-horizontal-scrollbar::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; height: 10px; width: var(--hierarchy-scroll-thumb); margin-top: 2px; border-radius: 4px; background: var(--vscode-scrollbarSlider-background, #79797980); }
+.hierarchy-horizontal-scrollbar:hover::-webkit-slider-thumb, .hierarchy-horizontal-scrollbar:focus-visible::-webkit-slider-thumb { background: var(--vscode-scrollbarSlider-hoverBackground, #797979b3); }
+.hierarchy-horizontal-scrollbar:active::-webkit-slider-thumb { background: var(--vscode-scrollbarSlider-activeBackground, #797979cc); }
+.hierarchy-tree::-webkit-scrollbar-track, .hierarchy-tree::-webkit-scrollbar-corner { background: var(--vscode-panel-background, #1e1e1e); }
+.hierarchy-tree::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background, #79797966); border: 2px solid var(--vscode-panel-background, #1e1e1e); border-radius: 6px; }
+.hierarchy-tree::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground, #797979aa); }
+.hierarchy-row { position: absolute; top: 0; left: 0; display: flex; align-items: center; min-width: 100%; width: max-content; cursor: pointer; font: 12px var(--vscode-editor-font-family, monospace); }
+.hierarchy-row:hover { background: var(--vscode-list-hoverBackground); }
+.hierarchy-branch-start { border-top: 1px solid var(--vscode-panel-border, #ffffff25); }
+.hierarchy-row[aria-selected=true] { color: var(--vscode-list-activeSelectionForeground); background: var(--vscode-list-activeSelectionBackground); }
+.hierarchy-row button { width: 22px; height: 24px; flex: 0 0 22px; border: 0; padding: 0; background: transparent; color: inherit; }
+.hierarchy-row .hierarchy-disclosure { color: var(--vscode-descriptionForeground, #999); opacity: .65; }
+.hierarchy-row .hierarchy-disclosure:hover { opacity: 1; }
+.hierarchy-root-bar { display: flex; align-items: center; gap: 10px; padding: 3px 8px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 12px; }
+.hierarchy-root-bar button { width: auto; flex: none; gap: 5px; padding: 0 5px; }
+.hierarchy-root-bar > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); }
+.hierarchy-indent { width: 22px; flex: 0 0 22px; }

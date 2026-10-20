@@ -6,6 +6,7 @@ import { LoadingState } from './DevicePicker';
 import { vscode } from '../../shared/vscode';
 import { ScanOverlay } from './ScanOverlay';
 import {InspectorOverlay, type useElementInspector} from './ElementInspector';
+import {HierarchyHighlight} from './HierarchyHighlight';
 
 interface PlaybackProps {
 	serverUrl: string;
@@ -45,6 +46,7 @@ export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, 
 		<PlaybackCanvas key={attempt} {...playback} />
 		<ScanOverlay enabled={scanEnabled} />
 		{inspector && <InspectorOverlay inspector={inspector} />}
+		<HierarchyHighlight />
 		{(status !== 'Playing' || launchStatus) && <LoadingState status={launchStatus ?? status} startedAt={startedAt} onRetry={launchStatus ? undefined : onRetry ?? onRestart} />}
 	</div>;
 }

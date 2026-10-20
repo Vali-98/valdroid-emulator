@@ -58,3 +58,14 @@ it('shows no tab bar in generic projects, even if Metro was previously selected'
 	expect(screen.queryByRole('tabpanel', {name: 'Metro'})).toBeNull();
 	expect(screen.getByRole('textbox', {name: 'ADB command'})).toBeTruthy();
 });
+
+it('mounts hierarchy only on its active tab and stops its subscription on tab change', async () => {
+	render(<ConsoleApp />);
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'project-info', expo: true, reactNative: true}})));
+	expect(bridge.postMessage).not.toHaveBeenCalledWith({type: 'hierarchy-active', active: true});
+	await act(async () => {fireEvent.click(screen.getByRole('tab', {name: 'Hierarchy'}));});
+	expect(await screen.findByRole('tabpanel', {name: 'Hierarchy'})).toBeTruthy();
+	expect(bridge.postMessage).toHaveBeenCalledWith({type: 'hierarchy-active', active: true});
+	fireEvent.click(screen.getByRole('tab', {name: 'Logcat'}));
+	expect(bridge.postMessage).toHaveBeenLastCalledWith({type: 'hierarchy-active', active: false});
+});

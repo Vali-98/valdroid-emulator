@@ -38,6 +38,6 @@ export async function resolveInspectorElements(root: string, port: number | unde
 				} catch {/* Keep the hierarchy usable when source maps aren't available. */}
 			}
 		}
-		return {name: element.name, ...(source ? {source} : {})};
+		return {name: element.name, ...(element.fiberId ? {fiberId: element.fiberId} : {}), ...(source ? {source} : {})};
 	}));
 }

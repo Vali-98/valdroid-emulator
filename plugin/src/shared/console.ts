@@ -17,11 +17,17 @@ export interface ConsoleState {
 	processes: Record<string, string>;
 }
 export type ConsoleRequest =
+	| {type: 'hierarchy-search'; query: string}
+	| {type: 'hierarchy-active'; active: boolean}
+	| {type: 'hierarchy-select' | 'hierarchy-hover'; id?: string}
+	| {type: 'hierarchy-refresh'}
 	| {type: 'js-clear'}
 	| {type: 'metro-clear'}
 	| { type: 'console-ready' | 'console-clear' | 'console-toggle' | 'console-cancel' | 'console-copy'; text?: string }
 	| { type: 'console-command'; command: string };
 export type ConsoleMessage =
+	| import('./hierarchy').HierarchySnapshot
+	| {type: 'hierarchy-focus'; id: string}
 	| {type: 'js-snapshot' | 'js-records'; records: import('./jsConsole').JSLog[]; oldestID?: number}
 	| import('./protocol').ProjectInfo
 	| {type: 'metro-snapshot'; text: string; focus?: boolean}
