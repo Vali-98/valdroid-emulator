@@ -14,6 +14,8 @@ import { useHostSession } from './hooks/useHostSession';
 import type { VideoStats } from './media/avcVideo';
 import { Toast, type ToastNotice } from './components/Toast';
 import {useElementInspector} from './components/ElementInspector';
+import {ToolbarHints} from './components/ToolbarHints';
+import {DeviceSettings} from './components/DeviceSettings';
 
 const initialDisplay: DisplayState = { id: 0, width: 0, height: 0, orientation: 0 };
 
@@ -43,15 +45,18 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 	const inspector = useElementInspector(host.devtools.active);
 	return <div {...fileDrop.rootProps} className="app" onPointerDownCapture={audio.resume} onKeyDownCapture={audio.resume}>
 		<input {...fileDrop.inputProps} />
+		<ToolbarHints />
 		<Header title={session.deviceName || 'Emulator Loaded'} loaded debugVisible={debugVisible}
 			busy={host.launch.busy} onLifecycle={host.lifecycle}
+			deviceTools={host.deviceTools} onDeviceAction={host.deviceAction}
 			onDebuggingChange={host.setDebugging}
 			onShowDevMenu={host.showDevMenu}
 			inspecting={inspector.selecting} onToggleInspector={inspector.toggle}
 			devtools={host.devtools} onToggleScan={host.toggleScan}
 			onToggleDebug={() => setDebugVisible(value => !value)} onClose={onClose} />
 		<main className="stage">
-			<DeviceRail onKey={control.sendDeviceKey} />
+			<DeviceRail onKey={control.sendDeviceKey} busy={host.deviceTools.busy || host.launch.busy} onRotate={direction => host.deviceAction({action: direction === 'left' ? 'rotate-left' : 'rotate-right'})} />
+			<DeviceSettings state={{...host.deviceTools, busy: host.deviceTools.busy || host.launch.busy}} onAction={host.deviceAction} />
 			<EmulatorScreen serverUrl={serverUrl} display={display} send={control.send} status={videoStatus} onStatus={reportVideoStatus}
 				debuggerPaused={host.devtools.debugger?.attached && host.devtools.debugger.paused} onDebugger={host.debuggerAction}
 				launchStatus={host.launch.busy ? host.launch.status : undefined}

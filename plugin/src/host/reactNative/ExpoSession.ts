@@ -35,6 +35,7 @@ export class ExpoSession {
 	private logSources?: JSLogSources;
 	private jsDelivery: Promise<void> = Promise.resolve();
 	async lifecycle(action: LifecycleAction): Promise<void> {
+		if (action === 'reconnect-device') {throw new Error('Device reconnection must use the emulator session.');}
 		if (!lifecycleActions.includes(action) || !this.project || !this.processes || !this.serial || !this.metroPort || !this.injection) {throw new Error('Start an Expo session first.');}
 		if (this.lifecycleBusy) {throw new Error('Another lifecycle action is running.');}
 		this.lifecycleBusy = true;

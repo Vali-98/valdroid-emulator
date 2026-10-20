@@ -16,6 +16,7 @@ export class EmulatorSession {
 	private emulatorProcess?: ChildProcess;
 	private emulatorSerial?: string;
 	private activeSerial?: string;
+	private reconnectSerial?: string;
 	private stoppingEmulator?: Promise<void>;
 	private readonly fileTransfer: AdbFileTransfer;
 	private startup?: AbortController;
@@ -35,6 +36,30 @@ export class EmulatorSession {
 	get deviceSerial(): string | undefined {return this.activeSerial;}
 
 	transferFile: TransferFile = (...args) => this.fileTransfer.send(...args);
+
+	async reconnect(): Promise<void> {
+		if (this.disconnecting) {await this.disconnecting;}
+		if (this.startup || this.stoppingEmulator) {throw new Error('Wait for the current device operation to finish.');}
+		const serial = this.activeSerial ?? this.reconnectSerial;
+		if (!serial) {throw new Error('Connect a device before reconnecting its streams.');}
+		const startup = new AbortController(); this.startup = startup;
+		try {
+			this.provider.setLaunchProgress('Reconnecting device…');
+			this.output.appendLine(`Restarting control server and screen-sharing agent for ${serial}`);
+			// Stop only the stream server/agent: retain emulator ownership, the app,
+			// Metro and their independent reverse mappings.
+			await this.stopServer(false);
+			startup.signal.throwIfAborted();
+			const state = await runFile(this.adbPath, ['-s', serial, 'get-state'], {signal: startup.signal, timeout: 5000});
+			if (state.trim() !== 'device') {throw new Error(`Device ${serial} is not available over ADB.`);}
+			const name = await this.deviceName(serial, serial, startup.signal);
+			await this.startServer(serial, name, startup.signal);
+		} catch (error) {
+			if (startup.signal.aborted) {return;}
+			await this.stopServer(false);
+			throw error;
+		} finally {if (this.startup === startup) {this.startup = undefined;}}
+	}
 
 	async startTarget(value: string): Promise<void> {
 		if (this.disconnecting) {await this.disconnecting;}
@@ -110,6 +135,7 @@ export class EmulatorSession {
 		const child = this.serverProcess;
 		let connected = false;
 		this.activeSerial = serial;
+		this.reconnectSerial = serial;
 		child.stdout?.on('data', data => this.output.append(data.toString()));
 		child.stderr?.on('data', data => this.output.append(data.toString()));
 		child.on('error', error => this.output.appendLine(`Control server process error: ${error.message}`));
@@ -201,6 +227,7 @@ export class EmulatorSession {
 
 	async stop(): Promise<void> {
 		this.startup?.abort();
+		this.reconnectSerial = undefined;
 		if (this.stoppingEmulator) {return this.stoppingEmulator;}
 		this.stoppingEmulator = (async () => {
 			const serial = await this.stopServer();

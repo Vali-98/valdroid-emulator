@@ -5,6 +5,9 @@ import { applyInitialPanelSize } from './initialPanelSize';
 import { FileUploadReceiver, type TransferFile } from '../files/FileUploadReceiver';
 
 export class EmulatorViewProvider implements vscode.WebviewViewProvider {
+	private deviceTools?: import('../adb/DeviceTools').DeviceTools;
+	setDeviceTools(tools: import('../adb/DeviceTools').DeviceTools): void {this.deviceTools = tools;}
+	postDeviceTools(): void {if (this.deviceTools) {this.postMessage(this.deviceTools.state);}}
 	private view?: vscode.WebviewView;
 	private serverUrl?: string;
 	private deviceName?: string;
@@ -28,6 +31,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		private readonly output: vscode.OutputChannel,
 		private readonly disconnectStream?: (reason: string) => Promise<void>,
 		private readonly expo?: {devMenu?: () => Promise<void>; debuggerPreference?: (enabled: boolean) => Promise<void>; debugger?: (action: import('../../shared/protocol').DebuggerAction) => Promise<void>; lifecycle?: (action: import('../../shared/protocol').LifecycleAction) => Promise<void>; start: (value: string) => Promise<void>; toggle: (enabled: boolean) => void; state: () => {active: boolean; enabled: boolean; connected: boolean}; inspect?: (request: import('../../shared/inspector').InspectorRequest) => void; openSource?: (id: number, index: number) => Promise<void>; showHierarchy?: (id: number, index: number) => Promise<void>},
+		private readonly reconnectDevice?: () => Promise<void>,
 	) {}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -59,6 +63,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 					return;
 				}
 				switch (message.type) {
+					case 'device-tools': if (!this.launchProgress.busy) {await this.deviceTools?.action(message);} break;
 					case 'dev-menu': if (!this.launchProgress.busy) {await this.expo?.devMenu?.();} break;
 					case 'debugger-preference': if (typeof message.enabled === 'boolean') {await this.expo?.debuggerPreference?.(message.enabled); this.postDevtools();} break;
 					case 'debugger':
@@ -67,7 +72,10 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 					case 'lifecycle':
 						if (this.launchProgress.busy) {break;}
 						this.setLaunchProgress('Preparing action…');
-						try {await this.expo?.lifecycle?.(message.action);}
+						try {
+							if (message.action === 'reconnect-device') {await uploads.cancelAll(); if (!this.reconnectDevice) {throw new Error('Device reconnection is unavailable.');} await this.reconnectDevice();}
+							else {await this.expo?.lifecycle?.(message.action);}
+						}
 						finally {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}
 						break;
 					case 'inspect-show-hierarchy': await this.expo?.showHierarchy?.(message.id, message.index); break;
@@ -80,6 +88,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 					case 'scan-toggle': this.expo?.toggle(message.enabled); this.postDevtools(); break;
 					case 'devtools-refresh': this.postDevtools(); break;
 					case 'ready':
+						this.postDeviceTools();
 						this.postMessage({type: 'expo-preference', enabled: this.context.workspaceState?.get<boolean>('valdroid.launchWithExpo', false) ?? false});
 						this.postMessage(this.projectInfo); this.postMessage(this.launchProgress);
 						await applyInitialPanelSize(this.context, webviewView, () => vscode.commands.executeCommand('workbench.action.increaseViewSize'))

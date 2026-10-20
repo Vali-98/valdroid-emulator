@@ -8,6 +8,7 @@ import { ExpoSession } from './host/reactNative/ExpoSession';
 import { ReactScanIntegration } from './host/reactNative/ReactScanIntegration';
 import {detectProjects} from './host/reactNative/projectDetection';
 import {HermesDebugger} from './host/reactNative/HermesDebugger';
+import {DeviceTools} from './host/adb/DeviceTools';
 
 let shutdownExtension: (() => Promise<void>) | undefined;
 let shutdownConsole: (() => Promise<void>) | undefined;
@@ -38,8 +39,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		catch (error) {console.appendMetro(`[Valdroid] Background debugger: ${String(error)}\n`);}
 	};
 	console.setHierarchyHandlers({active: active => expo.setHierarchyActive(active), select: id => expo.selectHierarchy(id), hover: id => expo.hoverHierarchy(id), refresh: () => expo.refreshHierarchy(), search: query => expo.searchHierarchy(query)});
-	const stop = async () => {await expo.stop(); await session.stop();};
-	const provider = new EmulatorViewProvider(context, discover, async value => {await expo.stop(); await session.startTarget(value);}, stop,
+	const stop = async () => {await deviceTools.stopRecording(); await expo.stop(); await session.stop();};
+	const provider = new EmulatorViewProvider(context, discover, async value => {await deviceTools.stopRecording(); await expo.stop(); await session.startTarget(value);}, stop,
 		() => session.deviceSerial, (file, name, serial, signal, progress) => session.transferFile(file, name, serial, signal, progress), output,
 		async reason => {await expo.stop(); await session.disconnect(reason);}, {
 			start: async value => {
@@ -51,6 +52,7 @@ export function activate(context: vscode.ExtensionContext): void {
 					const folder = folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick({placeHolder: 'Select the Expo project'});
 					if (!folder) {throw new Error('Open an Expo project folder in VS Code first.');}
 					await ReactScanIntegration.inspect(folder.uri.fsPath);
+					await deviceTools.stopRecording();
 					await expo.stop();
 					console.showMetro();
 					await vscode.commands.executeCommand('workbench.view.extension.valdroidConsole');
@@ -94,8 +96,10 @@ export function activate(context: vscode.ExtensionContext): void {
 				const position = new vscode.Position(source.lineNumber - 1, Math.max(0, source.columnNumber - 1));
 				await vscode.window.showTextDocument(document, {selection: new vscode.Range(position, position), preview: true});
 			},
-		});
+		}, () => session.reconnect());
 	session = new EmulatorSession(context.extensionPath, adbPath, emulatorPath, bitRate, output, provider, serial => console.setDevice(serial));
+	const deviceTools = new DeviceTools(adbPath, () => session.deviceSerial, () => provider.postDeviceTools(), message => provider.notify(message, 'error'));
+	provider.setDeviceTools(deviceTools);
 	shutdownExtension = async () => {await provider.cancelUploads(); await stop();};
 	let detectionVersion = 0;
 	const refreshProjectInfo = async () => {

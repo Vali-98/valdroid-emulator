@@ -32,6 +32,7 @@ function reducer(state: HostState, message: Action): HostState {
 }
 
 export function useHostSession() {
+	const [deviceTools, setDeviceTools] = React.useState<import('../../../shared/deviceTools').DeviceToolsState>({type: 'device-tools-state', busy: false});
 	const [launchWithExpo, setLaunchWithExpo] = React.useState(false);
 	const [project, setProject] = React.useState({expo: false, reactNative: false});
 	const [launch, setLaunch] = React.useState({busy: false, status: ''});
@@ -41,6 +42,7 @@ export function useHostSession() {
 	});
 	React.useEffect(() => {
 		const handleMessage = (event: MessageEvent<ExtensionMessage>) => {
+			if (event.data?.type === 'device-tools-state') {setDeviceTools(event.data);}
 			if (event.data?.type === 'expo-preference') {setLaunchWithExpo(event.data.enabled);}
 			if (event.data?.type === 'project-info') {setProject(event.data);}
 			if (event.data?.type === 'launch-progress') {setLaunch(event.data);}
@@ -55,10 +57,12 @@ export function useHostSession() {
 	return {
 		...state,
 		devtools,
+		deviceTools,
+		deviceAction: (command: import('../../../shared/deviceTools').DeviceToolAction) => vscode.postMessage({type: 'device-tools', ...command}),
 		showDevMenu: () => vscode.postMessage({type: 'dev-menu'}),
 		setDebugging: (enabled: boolean) => vscode.postMessage({type: 'debugger-preference', enabled}),
 		debuggerAction: (action: import('../../../shared/protocol').DebuggerAction) => vscode.postMessage({type: 'debugger', action}),
-		lifecycle: (action: import('../../../shared/protocol').LifecycleAction) => {if (!launch.busy) {setLaunch({busy: true, status: {'reload': 'Reloading JS…', 'restart-app': 'Restarting app…', 'restart-metro': 'Restarting Metro…', 'clear-metro': 'Clearing Metro cache…', reinstall: 'Reinstalling app…', rebuild: 'Rebuilding app…', 'clean-rebuild': 'Clean rebuilding app…'}[action]}); vscode.postMessage({type: 'lifecycle', action});}},
+		lifecycle: (action: import('../../../shared/protocol').LifecycleAction) => {if (!launch.busy) {setLaunch({busy: true, status: {'reconnect-device': 'Reconnecting device…', 'reload': 'Reloading JS…', 'restart-app': 'Restarting app…', 'restart-metro': 'Restarting Metro…', 'clear-metro': 'Clearing Metro cache…', reinstall: 'Reinstalling app…', rebuild: 'Rebuilding app…', 'clean-rebuild': 'Clean rebuilding app…'}[action]}); vscode.postMessage({type: 'lifecycle', action});}},
 		project, launch,
 		launchWithExpo,
 		setLaunchWithExpo: (enabled: boolean) => {setLaunchWithExpo(enabled); vscode.postMessage({type: 'expo-preference', enabled});},
