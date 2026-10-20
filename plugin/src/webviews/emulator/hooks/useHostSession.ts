@@ -55,6 +55,9 @@ export function useHostSession() {
 	return {
 		...state,
 		devtools,
+		showDevMenu: () => vscode.postMessage({type: 'dev-menu'}),
+		setDebugging: (enabled: boolean) => vscode.postMessage({type: 'debugger-preference', enabled}),
+		debuggerAction: (action: import('../../../shared/protocol').DebuggerAction) => vscode.postMessage({type: 'debugger', action}),
 		lifecycle: (action: import('../../../shared/protocol').LifecycleAction) => {if (!launch.busy) {setLaunch({busy: true, status: {'reload': 'Reloading JS…', 'restart-app': 'Restarting app…', 'restart-metro': 'Restarting Metro…', 'clear-metro': 'Clearing Metro cache…', reinstall: 'Reinstalling app…', rebuild: 'Rebuilding app…', 'clean-rebuild': 'Clean rebuilding app…'}[action]}); vscode.postMessage({type: 'lifecycle', action});}},
 		project, launch,
 		launchWithExpo,

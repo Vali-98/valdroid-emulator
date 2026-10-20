@@ -5,6 +5,7 @@ import { webviewHtml } from './html';
 import type {ProjectInfo} from '../../shared/protocol';
 import {jsLogLimit, type JSLog} from '../../shared/jsConsole';
 import {validHierarchyId, type HierarchySnapshot} from '../../shared/hierarchy';
+import {localInspectorSource} from '../reactNative/inspectorSource';
 
 export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 	private view?: vscode.WebviewView;
@@ -57,6 +58,17 @@ export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 		const messages = view.webview.onDidReceiveMessage(async (message: ConsoleRequest) => {
 			try {
 				switch (message.type) {
+					case 'js-open-source': {
+						if (!Number.isSafeInteger(message.id)) {break;}
+						const source = this.jsRecords.find(record => record.id === message.id)?.source;
+						if (!source) {break;}
+						const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(source.fileName));
+						if (!folder || !await localInspectorSource(folder.uri.fsPath, source)) {break;}
+						const document = await vscode.workspace.openTextDocument(vscode.Uri.file(source.fileName));
+						const position = new vscode.Position(source.lineNumber - 1, source.columnNumber - 1);
+						await vscode.window.showTextDocument(document, {selection: new vscode.Range(position, position), preview: true});
+						break;
+					}
 					case 'hierarchy-search': if (typeof message.query === 'string') {this.hierarchyHandlers?.search?.(message.query.slice(0, 200));} break;
 					case 'hierarchy-active':
 						if (typeof message.active === 'boolean') {this.hierarchyRequested = message.active; this.updateHierarchyVisibility(); if (message.active) {this.post(this.hierarchySnapshot);}}

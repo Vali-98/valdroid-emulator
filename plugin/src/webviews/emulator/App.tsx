@@ -45,12 +45,15 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 		<input {...fileDrop.inputProps} />
 		<Header title={session.deviceName || 'Emulator Loaded'} loaded debugVisible={debugVisible}
 			busy={host.launch.busy} onLifecycle={host.lifecycle}
+			onDebuggingChange={host.setDebugging}
+			onShowDevMenu={host.showDevMenu}
 			inspecting={inspector.selecting} onToggleInspector={inspector.toggle}
 			devtools={host.devtools} onToggleScan={host.toggleScan}
 			onToggleDebug={() => setDebugVisible(value => !value)} onClose={onClose} />
 		<main className="stage">
 			<DeviceRail onKey={control.sendDeviceKey} />
 			<EmulatorScreen serverUrl={serverUrl} display={display} send={control.send} status={videoStatus} onStatus={reportVideoStatus}
+				debuggerPaused={host.devtools.debugger?.attached && host.devtools.debugger.paused} onDebugger={host.debuggerAction}
 				launchStatus={host.launch.busy ? host.launch.status : undefined}
 				inspector={inspector}
 				scanEnabled={host.devtools.active && host.devtools.enabled}

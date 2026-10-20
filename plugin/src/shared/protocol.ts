@@ -10,8 +10,13 @@ export interface ProjectInfo {type: 'project-info'; expo: boolean; reactNative: 
 export interface LaunchProgress {type: 'launch-progress'; busy: boolean; status: string;}
 export const lifecycleActions = ['reload', 'restart-app', 'restart-metro', 'clear-metro', 'reinstall', 'rebuild', 'clean-rebuild'] as const;
 export type LifecycleAction = typeof lifecycleActions[number];
+export type DebuggerAction = 'attach' | 'detach' | 'pause' | 'continue' | 'next' | 'stepIn' | 'stepOut' | 'console';
+export interface DebuggerState {attached: boolean; paused: boolean; busy: boolean; enabled?: boolean;}
 
 export type HostMessage =
+	| {type: 'dev-menu'}
+	| {type: 'debugger-preference'; enabled: boolean}
+	| {type: 'debugger'; action: DebuggerAction}
 	| {type: 'lifecycle'; action: LifecycleAction}
 	| {type: 'inspect-show-hierarchy'; id: number; index: number}
 	| {type: 'inspect-point'; id: number; x: number; y: number; select?: boolean}
@@ -49,7 +54,7 @@ export interface StatusMessage {
 }
 
 export interface SessionNotice { type: 'notice'; id: number; message: string; level: 'info' | 'error'; }
-export interface DevtoolsState {type: 'devtools'; active: boolean; enabled: boolean; connected: boolean;}
+export interface DevtoolsState {type: 'devtools'; active: boolean; enabled: boolean; connected: boolean; debugger?: DebuggerState;}
 export type ExtensionMessage = import('./hierarchy').HierarchyHighlight | import('./inspector').InspectorResult | {type: 'expo-preference'; enabled: boolean} | ProjectInfo | LaunchProgress | import('./scan').ScanOutlines | DevtoolsState | StatusMessage | SessionNotice | { type: 'targets'; targets: EmulatorTarget[] } | UploadReply | UploadProgress;
 
 export interface DisplayState {

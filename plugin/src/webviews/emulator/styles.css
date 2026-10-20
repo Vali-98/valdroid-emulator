@@ -39,7 +39,17 @@
 		justify-content: flex-end;
 		gap: 4px;
 		flex-shrink: 0;
+		flex-wrap: wrap;
 	}
+ .debugger-controls { display: flex; gap: 2px; }
+ .debugger-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--vscode-foreground); }
+ .debugger-button:hover:not(:disabled) { background: var(--vscode-toolbar-hoverBackground); }
+ .debugger-button.selected { color: var(--valdroid-primary); background: var(--vscode-toolbar-activeBackground); }
+ .debugger-paused { position: absolute; inset: 0; z-index: 90; display: grid; place-items: center; padding: 12px; background: #0008; }
+ .debugger-paused-panel { display: grid; gap: 6px; max-width: 100%; padding: 12px; border: 1px solid var(--vscode-panel-border); border-radius: 8px; background: var(--vscode-editor-background); box-shadow: 0 4px 16px #0006; }
+ .debugger-paused-panel [role="status"] { padding: 2px 4px 6px; color: var(--vscode-descriptionForeground); }
+ .debugger-paused-panel button { display: flex; align-items: center; gap: 8px; text-align: left; padding: 7px 10px; background: transparent; color: var(--vscode-foreground); border-radius: 4px; }
+ .debugger-paused-panel button:hover { background: var(--vscode-list-hoverBackground); }
 	.device-pill {
 		min-width: 0;
 		justify-self: start;
@@ -300,6 +310,8 @@
 		padding: 0 38px 0 14px;
 		border-radius: 999px;
 	}
+ .device-picker-row { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 6px; align-items: center; }
+ .device-picker-row .play-button { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border-radius: 50%; }
 	.device-performance-warning {
 		max-width: 420px;
 		margin: 0;
@@ -318,7 +330,7 @@
 	.play-button svg {
 		width: 18px;
 		height: 18px;
-		fill: currentColor;
+		fill: none;
 	}
 	.loading {
 		position: absolute;
@@ -415,6 +427,8 @@ button:focus-visible { outline: 2px solid var(--vscode-foreground, #ddd); outlin
  .devtools-menu summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
  .devtools-popup { position: absolute; right: 0; top: 100%; z-index: 100; width: 210px; padding: 4px 12px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px; box-shadow: 0 4px 16px #0006; }
  .devtools-popup label { display: flex; justify-content: space-between; align-items: center; }
+ .devtools-action { display: block; width: 100%; padding: 6px 0; text-align: left; border: 0; background: transparent; color: var(--vscode-foreground); border-radius: 3px; }
+ .devtools-action:hover:not(:disabled) { background: var(--vscode-list-hoverBackground); }
  .lifecycle-menu .devtools-popup { left: 0; right: auto; padding: 4px; }
  .lifecycle-menu .devtools-popup button { display: block; width: 100%; text-align: left; border: 0; border-radius: 3px; padding: 6px 10px; color: var(--vscode-foreground); background: transparent; }
  .lifecycle-menu .devtools-popup button:hover:not(:disabled) { background: var(--vscode-list-hoverBackground); }

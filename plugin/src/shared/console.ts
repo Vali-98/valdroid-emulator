@@ -17,6 +17,7 @@ export interface ConsoleState {
 	processes: Record<string, string>;
 }
 export type ConsoleRequest =
+	| {type: 'js-open-source'; id: number}
 	| {type: 'hierarchy-search'; query: string}
 	| {type: 'hierarchy-active'; active: boolean}
 	| {type: 'hierarchy-select' | 'hierarchy-hover'; id?: string}

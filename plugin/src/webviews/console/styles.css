@@ -65,6 +65,9 @@ button[aria-pressed=true]:hover { background: var(--valdroid-primary-hover); }
 .js-console-log { flex: 1; overflow: auto; min-height: 0; user-select: text; font: 12px var(--vscode-editor-font-family, monospace); }
 .js-log-row { display: flex; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--vscode-panel-border, #ffffff15); align-items: flex-start; }
 .js-log-row time, .js-level { opacity: .6; white-space: nowrap; }
+ .js-source { margin-left: auto; flex-shrink: 0; align-self: flex-start; color: var(--vscode-descriptionForeground); font: inherit; white-space: nowrap; }
+ button.js-source { border: 0; background: transparent; padding: 0; cursor: pointer; }
+ button.js-source:hover { text-decoration: underline; color: var(--vscode-foreground); }
 .js-level { width: 36px; flex: 0 0 36px; }
 .js-level-warn { background: var(--vscode-inputValidation-warningBackground, #cca70015); }
 .js-level-error { background: var(--vscode-inputValidation-errorBackground, #f4433615); }

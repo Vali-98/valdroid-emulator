@@ -35,6 +35,7 @@ export function JSConsole({records, hidden = false}: {records: JSLog[]; hidden?:
 			{filtered.map(record => <div key={record.id} className={`js-log-row js-level-${record.level}`}>
 				<time>{new Date(record.time).toLocaleTimeString()}</time><span className="js-level">{record.level}</span>
 				<div className="js-args">{record.args.map((value, index) => <ValueTree key={index} value={value} />)}</div>
+				{record.location && (record.source ? <button type="button" className="js-source" title={record.source.fileName} onClick={() => bridge.postMessage({type: 'js-open-source', id: record.id})}>{record.location}</button> : <span className="js-source">{record.location}</span>)}
 			</div>)}
 		</div>
 		<footer className="console-footer">Values are snapshots at log time · {filtered.length} / {records.length}</footer>

@@ -48,11 +48,11 @@ it('refreshes connected devices automatically and stops refreshing after unmount
 it('uses one start action and routes it through Expo only when its switch is enabled', () => {
 	const props = {targets: [{label: 'Phone', value: 'avd:Phone'}], selected: 'avd:Phone', onSelect: vi.fn(), onRefresh: vi.fn(), onStart: vi.fn(), onStartExpo: vi.fn()};
 	const {rerender, container} = render(<DevicePicker {...props} project={{expo: true, reactNative: true}} />);
-	expect(container.querySelector('.device-picker .play-button')).toBeNull();
+	expect(container.querySelector('.device-picker-row select + .play-button')).toBeTruthy();
 	expect(container.querySelector('.device-picker .project-start-actions')).toBeTruthy();
 	fireEvent.click(screen.getByRole('button', {name: 'Start Emulator'}));
 	expect(props.onStart).toHaveBeenCalledOnce();
-	fireEvent.click(screen.getByRole('switch', {name: 'Launch with Expo'}));
+	fireEvent.click(screen.getByRole('switch', {name: 'Launch with Expo Integration'}));
 	fireEvent.click(screen.getByRole('button', {name: 'Start Emulator'}));
 	expect(props.onStartExpo).toHaveBeenCalledOnce();
 	rerender(<DevicePicker {...props} project={{expo: false, reactNative: false}} />);

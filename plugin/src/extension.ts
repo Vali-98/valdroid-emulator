@@ -7,6 +7,7 @@ import { ConsoleViewProvider } from './host/views/ConsoleViewProvider';
 import { ExpoSession } from './host/reactNative/ExpoSession';
 import { ReactScanIntegration } from './host/reactNative/ReactScanIntegration';
 import {detectProjects} from './host/reactNative/projectDetection';
+import {HermesDebugger} from './host/reactNative/HermesDebugger';
 
 let shutdownExtension: (() => Promise<void>) | undefined;
 let shutdownConsole: (() => Promise<void>) | undefined;
@@ -26,7 +27,16 @@ export function activate(context: vscode.ExtensionContext): void {
 	shutdownConsole = () => console.dispose();
 	let session: EmulatorSession;
 	let startingExpo = false;
+	let debuggingEnabled = context.workspaceState.get<boolean>('valdroid.debuggingEnabled', true);
 	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records), result => provider.postInspection(result), context.globalStorageUri.fsPath, snapshot => console.postHierarchy(snapshot), highlight => provider.postHierarchyHighlight(highlight));
+	const debuggerBridge = new HermesDebugger(() => expo.debugApp(), text => console.appendMetro(text), () => provider.postDevtools(), context.logUri.fsPath);
+	expo.beforeStop = () => debuggerBridge.detach();
+	context.subscriptions.push(debuggerBridge);
+	const autoAttach = async () => {
+		if (!debuggingEnabled) {return;}
+		try {await debuggerBridge.action('attach');}
+		catch (error) {console.appendMetro(`[Valdroid] Background debugger: ${String(error)}\n`);}
+	};
 	console.setHierarchyHandlers({active: active => expo.setHierarchyActive(active), select: id => expo.selectHierarchy(id), hover: id => expo.hoverHierarchy(id), refresh: () => expo.refreshHierarchy(), search: query => expo.searchHierarchy(query)});
 	const stop = async () => {await expo.stop(); await session.stop();};
 	const provider = new EmulatorViewProvider(context, discover, async value => {await expo.stop(); await session.startTarget(value);}, stop,
@@ -50,14 +60,25 @@ export function activate(context: vscode.ExtensionContext): void {
 					if (!serial) {throw new Error('No connected Android device.');}
 					provider.setLaunchProgress('Starting Metro…');
 					await expo.start(folder.uri.fsPath, serial);
+					await autoAttach();
 				} finally {startingExpo = false;}
 			},
-			toggle: enabled => expo.setScan(enabled), state: () => expo.state,
+			toggle: enabled => expo.setScan(enabled), state: () => ({...expo.state, debugger: {...debuggerBridge.state, enabled: debuggingEnabled}}),
+			devMenu: () => expo.showDevMenu(),
+			debuggerPreference: async enabled => {
+				debuggingEnabled = enabled;
+				await context.workspaceState.update('valdroid.debuggingEnabled', enabled);
+				if (!enabled) {await debuggerBridge.detach();}
+				else if (expo.state.active && !startingExpo) {await autoAttach();}
+			},
+			debugger: async action => {if (startingExpo) {throw new Error('Wait for Expo startup to finish.');} await debuggerBridge.action(action);},
 			lifecycle: async action => {
 				if (startingExpo) {throw new Error('Wait for Expo startup to finish.');}
 				if (!vscode.workspace.isTrusted) {throw new Error('Trust this workspace first.');}
 				if (action === 'clean-rebuild' && await vscode.window.showWarningMessage('Clean Gradle build outputs and rebuild? App data and native source files are retained.', {modal: true}, 'Clean rebuild') !== 'Clean rebuild') {return;}
+				await debuggerBridge.detach();
 				await expo.lifecycle(action);
+				await autoAttach();
 			},
 			inspect: request => expo.inspect(request),
 			showHierarchy: async (id, index) => {

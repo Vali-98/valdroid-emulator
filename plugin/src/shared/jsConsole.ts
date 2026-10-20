@@ -1,5 +1,5 @@
 export interface JSValue {type: string; preview: string; entries?: Array<{key: string; value: JSValue}>; truncated?: boolean;}
-export interface JSLog {id: number; level: 'log' | 'info' | 'debug' | 'warn' | 'error'; time: number; args: JSValue[];}
+export interface JSLog {id: number; level: 'log' | 'info' | 'debug' | 'warn' | 'error'; time: number; args: JSValue[]; stack?: string; location?: string; source?: import('./inspector').InspectorSource;}
 export const jsLogLimit = 1000;
 export function parseJSLogs(value: unknown): Omit<JSLog, 'id'>[] | undefined {
 	if (!value || typeof value !== 'object') {return;}
@@ -11,5 +11,5 @@ export function parseJSLogs(value: unknown): Omit<JSLog, 'id'>[] | undefined {
 		return item.entries === undefined || (Array.isArray(item.entries) && item.entries.length <= 100 && item.entries.every(entry => entry && typeof entry.key === 'string' && entry.key.length <= 1000 && validValue(entry.value, depth + 1)));
 	};
 	if (!message.records.every(record => record && ['log', 'info', 'debug', 'warn', 'error'].includes(record.level) && Number.isFinite(record.time) && Array.isArray(record.args) && record.args.length <= 20 && record.args.every(arg => validValue(arg, 0)))) {return;}
-	return message.records;
+	return message.records.map(({level, time, args, stack}) => ({level, time, args, ...(typeof stack === 'string' ? {stack: stack.slice(0, 16000)} : {})}));
 }

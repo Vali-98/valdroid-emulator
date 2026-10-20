@@ -25,6 +25,7 @@ export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, 
 	const abi = targets.find(target => target.value === selected)?.abi;
 	return <div className="empty">
 		<div className="device-picker">
+			<div className="device-picker-row">
 			<select aria-label="Select device" value={selected} onChange={event => onSelect(event.target.value)} onFocus={onRefresh}>
 				<option value="" disabled>Select Device...</option>
 				{targets.length === 0 && <option value="">No devices found</option>}
@@ -32,10 +33,9 @@ export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, 
 					{target.label}{target.value.startsWith('device:') ? ' (running)' : ''}
 				</option>)}
 			</select>
-			<div className="project-start-actions">
-				<button type="button" className="project-start-button" disabled={!selected} onClick={project?.expo && launchWithExpo && onStartExpo ? onStartExpo : onStart}><Play size={16} fill="currentColor" />Start Emulator</button>
-				{project?.expo && <Switch label="Launch with Expo" checked={launchWithExpo} onChange={setLaunchWithExpo} disabled={!onStartExpo} />}
+				<button type="button" className="play-button" aria-label="Start Emulator" title="Start Emulator" disabled={!selected} onClick={project?.expo && launchWithExpo && onStartExpo ? onStartExpo : onStart}><Play size={18} /></button>
 			</div>
+			{project?.expo && <div className="project-start-actions"><Switch label="Launch with Expo Integration" checked={launchWithExpo} onChange={setLaunchWithExpo} disabled={!onStartExpo} /></div>}
 		</div>
 		{(abi === 'x86' || abi === 'x86_64') && <p className="device-performance-warning">
 			Performance may be poor on x86 devices. ARM devices are recommended.

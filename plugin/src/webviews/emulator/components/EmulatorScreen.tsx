@@ -7,6 +7,7 @@ import { vscode } from '../../shared/vscode';
 import { ScanOverlay } from './ScanOverlay';
 import {InspectorOverlay, type useElementInspector} from './ElementInspector';
 import {HierarchyHighlight} from './HierarchyHighlight';
+import {DebuggerPaused} from './DebuggerPaused';
 
 interface PlaybackProps {
 	serverUrl: string;
@@ -32,7 +33,9 @@ function PlaybackCanvas({serverUrl, display, send, onStatus, onStats}: PlaybackP
 		id="screen" aria-label="Android emulator display" draggable={false} tabIndex={0} />;
 }
 
-export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, scanEnabled = false, launchStatus, inspector, ...playback}: PlaybackProps & {
+export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, scanEnabled = false, launchStatus, inspector, debuggerPaused = false, onDebugger, ...playback}: PlaybackProps & {
+	debuggerPaused?: boolean;
+	onDebugger?: (action: import('../../../shared/protocol').DebuggerAction) => void;
 	inspector?: ReturnType<typeof useElementInspector>;
 	launchStatus?: string;
 	scanEnabled?: boolean;
@@ -47,6 +50,7 @@ export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, 
 		<ScanOverlay enabled={scanEnabled} />
 		{inspector && <InspectorOverlay inspector={inspector} />}
 		<HierarchyHighlight />
+		{debuggerPaused && onDebugger && <DebuggerPaused onAction={onDebugger} />}
 		{(status !== 'Playing' || launchStatus) && <LoadingState status={launchStatus ?? status} startedAt={startedAt} onRetry={launchStatus ? undefined : onRetry ?? onRestart} />}
 	</div>;
 }

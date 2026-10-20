@@ -55,7 +55,7 @@ export function installJSConsole(controlURL) {
       try {
         try {
           const seen = new WeakSet(), budget = {nodes: 0, chars: 0};
-          const record = {level, time: Date.now(), args: args.slice(0, 20).map(value => serializeJSValue(value, 0, seen, budget))};
+          const record = {level, time: Date.now(), args: args.slice(0, 20).map(value => serializeJSValue(value, 0, seen, budget)), stack: String(new Error().stack || '').split('\n').slice(2, 22).join('\n').slice(0, 16000)};
           const size = JSON.stringify(record).length;
           queue.push({record, size}); queuedSize += size;
           while (queue.length > 500 || queuedSize > 1024 * 1024) queuedSize -= queue.shift().size;

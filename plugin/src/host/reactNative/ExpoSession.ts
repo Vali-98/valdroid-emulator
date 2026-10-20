@@ -14,17 +14,32 @@ import {parseJSLogs, type JSLog} from '../../shared/jsConsole';
 import {parseInspectorResult, type InspectorRequest, type InspectorResult} from '../../shared/inspector';
 import {resolveInspectorElements, localInspectorSource} from './inspectorSource';
 import {MetroInjection} from './MetroInjection';
+import {JSLogSources} from './JSLogSources';
 import {parseHierarchySnapshot, parseHierarchyHighlight, validHierarchyId, type HierarchyControl, type HierarchySnapshot, type HierarchyHighlight} from '../../shared/hierarchy';
 
 export class ExpoSession {
+	beforeStop?: () => Promise<void>;
+	async showDevMenu(): Promise<void> {
+		if (!this.project || !this.serial || this.lifecycleBusy) {throw new Error('Wait for an Expo development app to finish starting.');}
+		await runFile(this.adbPath, ['-s', this.serial, 'shell', 'input', 'keyevent', '82']);
+	}
+	async debugApp() {
+		if (!this.project || !this.serial || !this.metroPort || !this.injection || this.lifecycleBusy) {throw new Error('Start an Expo development app and wait for startup to finish.');}
+		const {root} = this.project, serial = this.serial, port = this.metroPort;
+		const artifact = await readAndroidArtifact(path.join(this.injection.directory, 'android-build.json'), root, serial, port);
+		return {root, serial, port, applicationId: artifact.applicationId};
+	}
 	private processes?: ExpoProcesses;
 	private lifecycleBusy = false;
 	private reloadRequested = false;
+	private logSources?: JSLogSources;
+	private jsDelivery: Promise<void> = Promise.resolve();
 	async lifecycle(action: LifecycleAction): Promise<void> {
 		if (!lifecycleActions.includes(action) || !this.project || !this.processes || !this.serial || !this.metroPort || !this.injection) {throw new Error('Start an Expo session first.');}
 		if (this.lifecycleBusy) {throw new Error('Another lifecycle action is running.');}
 		this.lifecycleBusy = true;
 		const root = this.project.root, serial = this.serial, port = this.metroPort, processes = this.processes;
+		this.logSources = new JSLogSources(root, port);
 		const cli = path.join(root, 'node_modules', 'expo', 'bin', 'cli');
 		const options = {runner: path.join(this.extensionPath, 'dist', 'expo-lifecycle.cjs'), stateFile: path.join(this.injection.directory, 'android-build.json'), adbPath: this.adbPath, serial};
 		try {
@@ -118,7 +133,13 @@ export class ExpoSession {
 							return;
 						}
 						const records = parseJSLogs(event);
-						if (records) {this.onJSLogs(records); response.writeHead(204).end(); return;}
+						if (records) {
+							response.writeHead(204).end();
+							const resolver = this.logSources;
+							const pending = resolver ? resolver.resolve(records) : Promise.resolve(records);
+							this.jsDelivery = this.jsDelivery.then(async () => {const resolved = await pending; if (this.logSources === resolver) {this.onJSLogs(resolved);}}).catch(() => undefined);
+							return;
+						}
 						const batch = parseScanOutlines(event);
 						if (!batch) {response.writeHead(400).end(); return;}
 						if (this.enabled) {this.onOutlines(batch);}
@@ -152,6 +173,7 @@ export class ExpoSession {
 			await new Promise<void>(resolve => reservation.close(() => resolve()));
 			await runFile(this.adbPath, ['-s', serial, 'reverse', `tcp:${metroPort}`, `tcp:${metroPort}`]);
 			this.metroPort = metroPort;
+			this.logSources = new JSLogSources(root, metroPort);
 			this.processes = new ExpoProcesses(this.log, this.onProgress, path.join(this.extensionPath, 'dist', 'expo-reporter.cjs'), {preload: path.join(this.extensionPath, 'dist', 'metroPreload.cjs'), sessionFile: this.injection.sessionFile});
 			await this.processes.start(root, path.join(root, 'node_modules', 'expo', 'bin', 'cli'), deviceName, metroPort, {runner: path.join(this.extensionPath, 'dist', 'expo-lifecycle.cjs'), stateFile: path.join(this.injection.directory, 'android-build.json'), adbPath: this.adbPath, serial}, appReady);
 		} catch (error) {this.log(`\n[Valdroid] Expo startup failed: ${String(error)}\n`); await this.stop(); throw error;}
@@ -211,6 +233,7 @@ export class ExpoSession {
 	}
 
 	private async stopResources(): Promise<void> {
+		await this.beforeStop?.().catch(error => this.log(`[Valdroid] Debugger detach during shutdown: ${String(error)}\n`));
 		await this.processes?.stop(); this.processes = undefined;
 		this.enabled = false; this.connectedAt = 0;
 		this.reloadRequested = false;
@@ -222,6 +245,8 @@ export class ExpoSession {
 		if (this.serial && this.port) {await runFile(this.adbPath, ['-s', this.serial, 'reverse', '--remove', `tcp:${this.port}`]).catch(() => undefined);}
 		if (this.serial && this.metroPort) {await runFile(this.adbPath, ['-s', this.serial, 'reverse', '--remove', `tcp:${this.metroPort}`]).catch(() => undefined);}
 		this.metroPort = undefined;
+		this.logSources = undefined;
+		this.jsDelivery = Promise.resolve();
 		this.serial = undefined; this.port = undefined;
 		this.project = undefined;
 		if (this.injection) {await this.injection.dispose(); this.injection = undefined;}

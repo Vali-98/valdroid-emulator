@@ -27,7 +27,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		private readonly transferFile: TransferFile,
 		private readonly output: vscode.OutputChannel,
 		private readonly disconnectStream?: (reason: string) => Promise<void>,
-		private readonly expo?: {lifecycle?: (action: import('../../shared/protocol').LifecycleAction) => Promise<void>; start: (value: string) => Promise<void>; toggle: (enabled: boolean) => void; state: () => {active: boolean; enabled: boolean; connected: boolean}; inspect?: (request: import('../../shared/inspector').InspectorRequest) => void; openSource?: (id: number, index: number) => Promise<void>; showHierarchy?: (id: number, index: number) => Promise<void>},
+		private readonly expo?: {devMenu?: () => Promise<void>; debuggerPreference?: (enabled: boolean) => Promise<void>; debugger?: (action: import('../../shared/protocol').DebuggerAction) => Promise<void>; lifecycle?: (action: import('../../shared/protocol').LifecycleAction) => Promise<void>; start: (value: string) => Promise<void>; toggle: (enabled: boolean) => void; state: () => {active: boolean; enabled: boolean; connected: boolean}; inspect?: (request: import('../../shared/inspector').InspectorRequest) => void; openSource?: (id: number, index: number) => Promise<void>; showHierarchy?: (id: number, index: number) => Promise<void>},
 	) {}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -59,6 +59,11 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 					return;
 				}
 				switch (message.type) {
+					case 'dev-menu': if (!this.launchProgress.busy) {await this.expo?.devMenu?.();} break;
+					case 'debugger-preference': if (typeof message.enabled === 'boolean') {await this.expo?.debuggerPreference?.(message.enabled); this.postDevtools();} break;
+					case 'debugger':
+						if (!this.launchProgress.busy) {await this.expo?.debugger?.(message.action); this.postDevtools();}
+						break;
 					case 'lifecycle':
 						if (this.launchProgress.busy) {break;}
 						this.setLaunchProgress('Preparing action…');
@@ -176,5 +181,5 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private postMessage(message: ExtensionMessage): void {
 		void this.view?.webview.postMessage(message);
 	}
-	private postDevtools(): void {this.postMessage({type: 'devtools', ...(this.expo?.state() ?? {active: false, enabled: false, connected: false})});}
+	postDevtools(): void {this.postMessage({type: 'devtools', ...(this.expo?.state() ?? {active: false, enabled: false, connected: false})});}
 }
