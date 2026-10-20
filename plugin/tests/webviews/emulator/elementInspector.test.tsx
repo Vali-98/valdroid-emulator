@@ -84,4 +84,12 @@ it('anchors right-click hierarchy next to the cursor without enabling selector m
 	fireEvent.click(r.getByText('Card'));
 	// Filtering must preserve the original index used by the host's source lookup.
 	expect(postMessage).toHaveBeenLastCalledWith({type: 'inspect-open-source', id: request.id, index: 1});
+	fireEvent.contextMenu(canvas, {clientX: 50, clientY: 100});
+	const nextRequest = postMessage.mock.calls.at(-1)![0];
+	reply({type: 'inspector-result', id: nextRequest.id, width: 400, height: 800, resolved: true, elements: [
+		{name: 'InternalView', fiberId: 'epoch:1'},
+		{name: 'Card', fiberId: 'epoch:2', source: {fileName: '/project/Card.tsx', lineNumber: 8, columnNumber: 1}},
+	]});
+	fireEvent.click(r.getByText('Show hierarchy'));
+	expect(postMessage).toHaveBeenLastCalledWith({type: 'inspect-show-hierarchy', id: nextRequest.id, index: 1});
 });
