@@ -5,7 +5,7 @@ import { delay, runFile, waitForExit } from '../session/process';
 export class ExpoProcesses {
 	private readonly children = new Set<ChildProcess>();
 	private readonly abort = new AbortController();
-	constructor(private readonly log: (text: string) => void, private readonly onProgress: (status: string) => void = () => undefined, private readonly reporterPreload?: string) {}
+	constructor(private readonly log: (text: string) => void, private readonly onProgress: (status: string) => void = () => undefined, private readonly reporterPreload?: string, private readonly injection?: {preload: string; sessionFile: string}) {}
 
 	async start(root: string, cli: string, deviceName: string, port: number, appReady?: Promise<void>): Promise<void> {
 		const metro = this.launch(root, cli, ['start', '--localhost', '--port', String(port)], 'Metro');
@@ -52,8 +52,14 @@ export class ExpoProcesses {
 		const env: NodeJS.ProcessEnv = {...process.env, ELECTRON_RUN_AS_NODE: '1', FORCE_COLOR: '0'};
 		// Piped output already disables Expo's interactive prompts. CI also disables Metro watching.
 		delete env.CI;
+		delete env.VALDROID_METRO_SESSION;
+		delete env.VALDROID_METRO_PID;
 		// Expo binds "localhost" using DNS order. ADB reverse and our probe use IPv4.
 		const preload = label === 'Metro' && this.reporterPreload ? ['--require', this.reporterPreload] : [];
+		if (label === 'Metro' && this.injection) {
+			env.VALDROID_METRO_SESSION = this.injection.sessionFile;
+			preload.push('--require', this.injection.preload);
+		}
 		const child = spawn(process.execPath, ['--dns-result-order=ipv4first', ...preload, cli, ...args], {
 			cwd: root, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'],
 			env,

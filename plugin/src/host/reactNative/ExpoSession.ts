@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { ReactScanIntegration, type ReactScanProject } from './ReactScanIntegration';
 import { runFile } from '../session/process';
@@ -10,6 +11,7 @@ import { parseScanOutlines, type ScanOutlines } from '../../shared/scan';
 import {parseJSLogs, type JSLog} from '../../shared/jsConsole';
 import {parseInspectorResult, type InspectorRequest, type InspectorResult} from '../../shared/inspector';
 import {resolveInspectorElements, localInspectorSource} from './inspectorSource';
+import {MetroInjection} from './MetroInjection';
 
 export class ExpoSession {
 	private processes?: ExpoProcesses;
@@ -22,11 +24,13 @@ export class ExpoSession {
 	private stopping?: Promise<void>;
 	private inspectRequest?: InspectorRequest;
 	private inspectResult?: InspectorResult;
-	constructor(private readonly extensionPath: string, private readonly adbPath: string, private readonly log: (text: string) => void = () => undefined, private readonly onOutlines: (batch: ScanOutlines) => void = () => undefined, private readonly onProgress: (status: string) => void = () => undefined, private readonly onJSLogs: (records: Omit<JSLog, 'id'>[]) => void = () => undefined, private readonly onInspection: (result: InspectorResult) => void = () => undefined) {}
+	private injection?: MetroInjection;
+	constructor(private readonly extensionPath: string, private readonly adbPath: string, private readonly log: (text: string) => void = () => undefined, private readonly onOutlines: (batch: ScanOutlines) => void = () => undefined, private readonly onProgress: (status: string) => void = () => undefined, private readonly onJSLogs: (records: Omit<JSLog, 'id'>[]) => void = () => undefined, private readonly onInspection: (result: InspectorResult) => void = () => undefined, private readonly storagePath: string = path.join(os.tmpdir(), 'valdroid-metro')) {}
 
 	async start(root: string, serial: string): Promise<void> {
 		await this.stop();
 		this.log(`\n[Valdroid] Starting Expo project: ${root}\n`);
+		if (await ReactScanIntegration.recoverLegacy(root)) {this.log('[Valdroid] Recovered the legacy .valdroid bootstrap and restored the original app entry.\n');}
 		const project = await ReactScanIntegration.inspect(root);
 		const deviceName = await resolveExpoDeviceName(this.adbPath, serial);
 		this.log(`[Valdroid] Expo target: ${deviceName} (ADB: ${serial})\n`);
@@ -78,8 +82,8 @@ export class ExpoSession {
 		this.port = address.port; this.serial = serial;
 		try {
 			await runFile(this.adbPath, ['-s', serial, 'reverse', `tcp:${this.port}`, `tcp:${this.port}`]);
-			await ReactScanIntegration.enable(project, path.join(this.extensionPath, 'dist', 'react-scan-runtime.js'), `http://127.0.0.1:${this.port}/${token}`);
-			this.project = await ReactScanIntegration.inspect(root);
+			this.injection = await MetroInjection.prepare(this.storagePath, root, path.join(this.extensionPath, 'dist', 'react-scan-runtime.js'), `http://127.0.0.1:${this.port}/${token}`);
+			this.project = project;
 			const reservation = http.createServer();
 			await new Promise<void>((resolve, reject) => {reservation.once('error', reject); reservation.listen(0, '127.0.0.1', resolve);});
 			const metroAddress = reservation.address();
@@ -88,7 +92,7 @@ export class ExpoSession {
 			await new Promise<void>(resolve => reservation.close(() => resolve()));
 			await runFile(this.adbPath, ['-s', serial, 'reverse', `tcp:${metroPort}`, `tcp:${metroPort}`]);
 			this.metroPort = metroPort;
-			this.processes = new ExpoProcesses(this.log, this.onProgress, path.join(this.extensionPath, 'dist', 'expo-reporter.cjs'));
+			this.processes = new ExpoProcesses(this.log, this.onProgress, path.join(this.extensionPath, 'dist', 'expo-reporter.cjs'), {preload: path.join(this.extensionPath, 'dist', 'metroPreload.cjs'), sessionFile: this.injection.sessionFile});
 			await this.processes.start(root, path.join(root, 'node_modules', 'expo', 'bin', 'cli'), deviceName, metroPort, appReady);
 		} catch (error) {this.log(`\n[Valdroid] Expo startup failed: ${String(error)}\n`); await this.stop(); throw error;}
 	}
@@ -134,7 +138,8 @@ export class ExpoSession {
 		if (this.serial && this.metroPort) {await runFile(this.adbPath, ['-s', this.serial, 'reverse', '--remove', `tcp:${this.metroPort}`]).catch(() => undefined);}
 		this.metroPort = undefined;
 		this.serial = undefined; this.port = undefined;
-		if (this.project) {const project = this.project; this.project = undefined; await ReactScanIntegration.disable(await ReactScanIntegration.inspect(project.root));}
+		this.project = undefined;
+		if (this.injection) {await this.injection.dispose(); this.injection = undefined;}
 	}
 	private metroPort?: number;
 }

@@ -75,7 +75,8 @@ async function main() {
   try {
     for (const name of ['README.md', 'CHANGELOG.md', 'media', 'dist/extension.js',
       'dist/webview.js', 'dist/webview.css', 'dist/console.js', 'dist/console.css',
-      'dist/THIRD_PARTY_NOTICES.txt']) {
+      'dist/THIRD_PARTY_NOTICES.txt', 'dist/react-scan-runtime.js', 'dist/expo-reporter.cjs',
+      'dist/metroIntegration.cjs', 'dist/metroPreload.cjs']) {
       fs.mkdirSync(path.dirname(path.join(stage, name)), { recursive: true });
       fs.cpSync(path.join(plugin, name), path.join(stage, name), { recursive: true });
     }

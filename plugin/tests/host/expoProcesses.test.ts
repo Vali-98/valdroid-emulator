@@ -84,3 +84,19 @@ it('finishes startup when the app connects even while the Expo build CLI remains
 	expect(output).toContain('[Build] exited (1)');
 	await processes.stop();
 });
+
+it('preloads runtime injection only in owned Metro, never in the build CLI', async () => {
+	const metro = child(), build = child();
+	vi.mocked(spawn).mockReturnValueOnce(metro as unknown as ReturnType<typeof spawn>).mockReturnValueOnce(build as unknown as ReturnType<typeof spawn>);
+	vi.stubGlobal('fetch', vi.fn(async () => ({ok: true, status: 200, text: async () => 'packager-status:running'})));
+	const processes = new ExpoProcesses(() => undefined, () => undefined, '/extension/expo-reporter.cjs', {preload: '/extension/metroPreload.cjs', sessionFile: '/storage/session.json'});
+	const starting = processes.start('/project', '/project/cli', 'Phone', 8087);
+	await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+	const metroArgs = vi.mocked(spawn).mock.calls[0];
+	expect(metroArgs[1]).toEqual(['--dns-result-order=ipv4first', '--require', '/extension/expo-reporter.cjs', '--require', '/extension/metroPreload.cjs', '/project/cli', 'start', '--localhost', '--port', '8087']);
+	expect(metroArgs[2]?.env?.VALDROID_METRO_SESSION).toBe('/storage/session.json');
+	expect(vi.mocked(spawn).mock.calls[1][2]?.env).not.toHaveProperty('VALDROID_METRO_SESSION');
+	build.emit('close', 0, null);
+	await starting;
+	await processes.stop();
+});

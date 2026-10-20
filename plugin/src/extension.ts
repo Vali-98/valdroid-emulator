@@ -26,7 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	shutdownConsole = () => console.dispose();
 	let session: EmulatorSession;
 	let startingExpo = false;
-	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records), result => provider.postInspection(result));
+	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records), result => provider.postInspection(result), context.globalStorageUri.fsPath);
 	const stop = async () => {await expo.stop(); await session.stop();};
 	const provider = new EmulatorViewProvider(context, discover, async value => {await expo.stop(); await session.startTarget(value);}, stop,
 		() => session.deviceSerial, (file, name, serial, signal, progress) => session.transferFile(file, name, serial, signal, progress), output,

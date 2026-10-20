@@ -1,73 +1,71 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as vm from 'node:vm';
-import { afterEach, describe, expect, it } from 'vitest';
-import { ReactScanIntegration } from '../../src/host/reactNative/ReactScanIntegration';
+import {afterEach, expect, it} from 'vitest';
+import {ReactScanIntegration} from '../../src/host/reactNative/ReactScanIntegration';
+import {MetroInjection} from '../../src/host/reactNative/MetroInjection';
 
 const directories: string[] = [];
-
-afterEach(async () => {await Promise.all(directories.splice(0).map(directory => fs.rm(directory, {recursive: true, force: true})));});
-
-async function fixture(packageJSON: object): Promise<string> {
-	const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'valdroid-react-scan-'));
-	directories.push(directory);
-	await fs.writeFile(path.join(directory, 'package.json'), `${JSON.stringify(packageJSON, undefined, 2)}\n`);
-	return directory;
+afterEach(async () => {await Promise.all(directories.splice(0).map(dir => fs.rm(dir, {recursive: true, force: true})));});
+async function fixture(main?: string) {
+	const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'valdroid-injection-')));
+	directories.push(dir);
+	const root = path.join(dir, 'project');
+	await fs.mkdir(root);
+	await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({dependencies: {expo: '*'}, ...(main ? {main} : {})}));
+	const runtime = path.join(dir, 'runtime.js');
+	await fs.writeFile(runtime, 'module.exports = {startScan() {}};');
+	return {dir, root, runtime, storage: path.join(dir, 'extension-storage')};
 }
 
-describe('ReactScanIntegration', () => {
-	it('creates a development-only entry and restores the Expo entry on disable', async () => {
-		const root = await fixture({name: 'demo', dependencies: {expo: '~55.0.0', 'react-scan': '^0.0.0'}});
-		const project = await ReactScanIntegration.inspect(root);
-		expect(project.entryModule).toBe('expo/AppEntry');
-		await ReactScanIntegration.enable(project);
-		const enabled = await ReactScanIntegration.inspect(root);
-		expect(enabled.enabled).toBe(true);
-		expect(await fs.readFile(path.join(root, '.valdroid', 'react-scan-entry.js'), 'utf8')).toContain('require("expo/AppEntry")');
-		await ReactScanIntegration.disable(enabled);
-		const packageJSON = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8')) as {main?: string};
-		expect(packageJSON.main).toBeUndefined();
-		expect(await fs.stat(path.join(root, '.valdroid')).catch(() => undefined)).toBeUndefined();
-	});
+it.each([undefined, 'expo-router/entry', './index.tsx'])('keeps project files and main=%s unchanged through preparation and cleanup', async main => {
+	const f = await fixture(main);
+	const before = await fs.readFile(path.join(f.root, 'package.json'), 'utf8');
+	expect(await ReactScanIntegration.recoverLegacy(f.root)).toBe(false);
+	const injection = await MetroInjection.prepare(f.storage, f.root, f.runtime, 'http://127.0.0.1/token');
+	expect(await fs.readdir(f.root)).toEqual(['package.json']);
+	expect(await fs.readFile(path.join(f.root, 'package.json'), 'utf8')).toBe(before);
+	const session = JSON.parse(await fs.readFile(injection.sessionFile, 'utf8')) as {runtimePath: string; controlURL: string};
+	expect(session.runtimePath.startsWith(f.storage)).toBe(true);
+	expect(session.controlURL).toBe('http://127.0.0.1/token');
+	expect(await fs.readFile(session.runtimePath, 'utf8')).toContain('startScan');
+	await injection.dispose();
+	expect(await fs.readdir(f.storage)).toEqual([]);
+	expect(await fs.readFile(path.join(f.root, 'package.json'), 'utf8')).toBe(before);
+});
 
-	it('preserves an Expo Router entry module', async () => {
-		const root = await fixture({name: 'demo', main: 'expo-router/entry', dependencies: {expo: '~55.0.0', 'react-scan': '^0.0.0'}});
-		await ReactScanIntegration.enable(await ReactScanIntegration.inspect(root));
-		const entry = await fs.readFile(path.join(root, '.valdroid', 'react-scan-entry.js'), 'utf8');
-		expect(entry).toContain('require("expo-router/entry")');
-		await ReactScanIntegration.disable(await ReactScanIntegration.inspect(root));
-		const packageJSON = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8')) as {main?: string};
-		expect(packageJSON.main).toBe('expo-router/entry');
-	});
+it('removes partially prepared storage after a missing adapter, without modifying the project', async () => {
+	const f = await fixture();
+	await expect(MetroInjection.prepare(f.storage, f.root, path.join(f.dir, 'missing.js'), 'url')).rejects.toThrow();
+	expect(await fs.readdir(f.storage)).toEqual([]);
+	expect(await fs.readdir(f.root)).toEqual(['package.json']);
+});
 
-	it('resolves a project-local custom entry from the generated directory', async () => {
-		const root = await fixture({name: 'demo', main: 'index.js', dependencies: {expo: '~55.0.0', 'react-scan': '^0.0.0'}});
-		await ReactScanIntegration.enable(await ReactScanIntegration.inspect(root));
-		const entry = await fs.readFile(path.join(root, '.valdroid', 'react-scan-entry.js'), 'utf8');
-		expect(entry).toContain('require("../index.js")');
-	});
+it.each([undefined, 'expo-router/entry'])('recovers an owned legacy bootstrap and restores main=%s', async previousMain => {
+	const f = await fixture('./.valdroid/react-scan-entry.js');
+	const legacy = path.join(f.root, '.valdroid');
+	await fs.mkdir(legacy);
+	await fs.writeFile(path.join(legacy, 'react-scan.json'), JSON.stringify({version: 1, previousMain}));
+	await fs.writeFile(path.join(legacy, 'react-scan-entry.js'), '/* Generated by Valdroid. Development-only React Scan bootstrap. */\n');
+	await fs.writeFile(path.join(legacy, 'react-scan-runtime.js'), 'old adapter');
+	expect(await ReactScanIntegration.recoverLegacy(f.root)).toBe(true);
+	expect(JSON.parse(await fs.readFile(path.join(f.root, 'package.json'), 'utf8')).main).toBe(previousMain);
+	expect(await fs.readdir(f.root)).toEqual(['package.json']);
+});
 
-	it('supplies the bundled runtime without a project dependency', async () => {
-		const root = await fixture({name: 'demo', dependencies: {expo: '~55.0.0'}});
-		const runtime = path.join(root, 'runtime.js');
-		await fs.writeFile(runtime, 'module.exports = {};');
-		await ReactScanIntegration.enable(await ReactScanIntegration.inspect(root), runtime, 'http://127.0.0.1:12345/token');
-		expect(await fs.readFile(path.join(root, '.valdroid', 'react-scan-runtime.js'), 'utf8')).toBe('module.exports = {};');
-		expect(await fs.readFile(path.join(root, '.valdroid', 'react-scan-entry.js'), 'utf8')).toContain("require('./react-scan-runtime').startScan");
-	});
+it('does not remove an unrelated .valdroid directory', async () => {
+	const f = await fixture('expo-router/entry');
+	await fs.mkdir(path.join(f.root, '.valdroid'));
+	await fs.writeFile(path.join(f.root, '.valdroid/user-file'), 'keep');
+	expect(await ReactScanIntegration.recoverLegacy(f.root)).toBe(false);
+	expect(await fs.readFile(path.join(f.root, '.valdroid/user-file'), 'utf8')).toBe('keep');
+});
 
-	it('starts the supplied native adapter before loading the app', async () => {
-		const root = await fixture({dependencies: {expo: '*'}});
-		const runtime = path.join(root, 'runtime.js');
-		await fs.writeFile(runtime, 'unused');
-		await ReactScanIntegration.enable(await ReactScanIntegration.inspect(root), runtime, 'http://localhost/control');
-		const source = await fs.readFile(path.join(root, '.valdroid', 'react-scan-entry.js'), 'utf8');
-		const calls: string[] = [];
-		vm.runInNewContext(source, {
-			__DEV__: true, console,
-			require: (module: string) => module === './react-scan-runtime' ? {startScan: (url: string) => calls.push(url)} : calls.push(module),
-		});
-		expect(calls).toEqual(['http://localhost/control', 'expo/AppEntry']);
-	});
+it('refuses recovery if an old entry does not have the generated marker', async () => {
+	const f = await fixture('./.valdroid/react-scan-entry.js');
+	await fs.mkdir(path.join(f.root, '.valdroid'));
+	await fs.writeFile(path.join(f.root, '.valdroid/react-scan.json'), JSON.stringify({version: 1}));
+	await fs.writeFile(path.join(f.root, '.valdroid/react-scan-entry.js'), 'user code');
+	await expect(ReactScanIntegration.recoverLegacy(f.root)).rejects.toThrow('unrecognized');
+	expect((await ReactScanIntegration.inspect(f.root)).enabled).toBe(true);
 });
