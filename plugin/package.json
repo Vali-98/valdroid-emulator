@@ -3,7 +3,7 @@
   "displayName": "Valdroid Emulator",
   "icon": "media/icon.png",
   "description": "Android emulator and logcat inside VS Code.",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "publisher": "Vali-98",
   "license": "AGPL-3.0-only",
   "repository": {
