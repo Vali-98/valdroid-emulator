@@ -24,6 +24,17 @@ The console is a command runner and log viewer, not an interactive terminal.
 Commands such as `shell getprop ro.product.model` and `install "/path/App.apk"`
 are supported; interactive shells and password prompts are not.
 
+## Expo Integration
+
+Enable **Launch with Expo Integration** to build and run an Expo Android app.
+
+- Manage builds, installs, Metro, and JS reloads.
+- Read expandable JS logs with source links.
+- Inspect elements, jump to source, and browse component props and hierarchy.
+- Highlight React renders with React Scan.
+
+See [Expo integration features](../docs/Expo.md) for the full list.
+
 ## Requirements
 
 - Desktop VS Code 1.95 or newer. Browser-only VS Code is not supported.
