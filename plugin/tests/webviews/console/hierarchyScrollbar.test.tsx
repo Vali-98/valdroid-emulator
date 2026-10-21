@@ -24,3 +24,11 @@ it('omits the control when the tree fits horizontally', () => {
 	render(<HierarchyScrollbar viewport={viewport} contentWidth={200} />);
 	expect(screen.queryByRole('slider')).toBeNull();
 });
+it('preserves horizontal trackpad and shift-wheel navigation with the native bar hidden', () => {
+	const viewport = createRef<HTMLDivElement>(); viewport.current = document.createElement('div');
+	Object.defineProperty(viewport.current, 'clientWidth', {value: 200});
+	render(<HierarchyScrollbar viewport={viewport} contentWidth={800} />);
+	fireEvent.wheel(viewport.current, {deltaX: 90, deltaY: 0}); expect(viewport.current.scrollLeft).toBe(90);
+	fireEvent.wheel(viewport.current, {deltaY: 60, shiftKey: true}); expect(viewport.current.scrollLeft).toBe(150);
+	fireEvent.wheel(viewport.current, {deltaY: 60}); expect(viewport.current.scrollLeft).toBe(150);
+});

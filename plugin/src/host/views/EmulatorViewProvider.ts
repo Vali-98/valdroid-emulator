@@ -5,6 +5,17 @@ import { applyInitialPanelSize } from './initialPanelSize';
 import { FileUploadReceiver, type TransferFile } from '../files/FileUploadReceiver';
 
 export class EmulatorViewProvider implements vscode.WebviewViewProvider {
+	private shuttingDown?: Promise<void>;
+	shutdown(): Promise<void> {
+		if (this.shuttingDown) {return this.shuttingDown;}
+		this.setLaunchProgress('Shutting down…');
+		const operation = (async () => {
+			try {await this.cancelUploads(); await this.stopEmulator(); this.setServer(undefined); this.notify('Disconnected from emulator.', 'info');}
+			finally {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}
+		})();
+		this.shuttingDown = operation;
+		return operation.finally(() => {if (this.shuttingDown === operation) {this.shuttingDown = undefined;}});
+	}
 	private deviceTools?: import('../adb/DeviceTools').DeviceTools;
 	setDeviceTools(tools: import('../adb/DeviceTools').DeviceTools): void {this.deviceTools = tools;}
 	postDeviceTools(): void {if (this.deviceTools) {this.postMessage(this.deviceTools.state);}}
@@ -19,7 +30,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private launchProgress: import('../../shared/protocol').LaunchProgress = {type: 'launch-progress', busy: false, status: ''};
 	private expoTarget?: string;
 	setProjectInfo(info: import('../../shared/protocol').ProjectInfo): void {this.projectInfo = info; this.postMessage(info);}
-	setLaunchProgress(status: string): void {this.launchProgress = {type: 'launch-progress', busy: true, status}; this.postMessage(this.launchProgress);}
+	setLaunchProgress(status: string): void {if (this.shuttingDown) {return;} this.launchProgress = {type: 'launch-progress', busy: true, status}; this.postMessage(this.launchProgress);}
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -76,7 +87,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 							if (message.action === 'reconnect-device') {await uploads.cancelAll(); if (!this.reconnectDevice) {throw new Error('Device reconnection is unavailable.');} await this.reconnectDevice();}
 							else {await this.expo?.lifecycle?.(message.action);}
 						}
-						finally {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}
+						finally {if (!this.shuttingDown) {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}}
 						break;
 					case 'inspect-show-hierarchy': await this.expo?.showHierarchy?.(message.id, message.index); break;
 					case 'inspect-point': this.expo?.inspect?.(message); break;
@@ -124,10 +135,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 						break;
 					case 'stop':
 					case 'close':
-						await uploads.cancelAll();
-						await this.stopEmulator();
-						this.setServer(undefined);
-						this.notify('Disconnected from emulator.', 'info');
+						await this.shutdown();
 						break;
 				}
 			} catch (error) {
@@ -158,7 +166,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		this.expoTarget = value;
 		this.setLaunchProgress('Starting Expo session…');
 		try {await this.expo.start(value); this.postDevtools();}
-		finally {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}
+		finally {if (!this.shuttingDown) {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}}
 	}
 
 	setServer(serverUrl?: string, deviceName?: string): void {

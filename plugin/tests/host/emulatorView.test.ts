@@ -49,3 +49,16 @@ it('tracks Expo startup separately from the emulator stream until the build prom
 	finish(); await starting;
 	expect(f.postMessage).toHaveBeenCalledWith(expect.objectContaining({type: 'launch-progress', busy: false}));
 });
+
+it('keeps shutdown loading active while stopping and clears it after teardown', async () => {
+	const f = fixture();
+	let finish!: () => void;
+	f.stop.mockImplementationOnce(() => new Promise<undefined>(resolve => {finish = () => resolve(undefined);}));
+	const closing = f.receive({type: 'close'});
+	await vi.waitFor(() => expect(f.stop).toHaveBeenCalledOnce());
+	expect(f.postMessage).toHaveBeenCalledWith({type: 'launch-progress', busy: true, status: 'Shutting down…'});
+	f.provider.setServer(undefined);
+	expect(f.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({type: 'launch-progress', busy: false}));
+	finish(); await closing;
+	expect(f.postMessage).toHaveBeenCalledWith({type: 'launch-progress', busy: false, status: ''});
+});

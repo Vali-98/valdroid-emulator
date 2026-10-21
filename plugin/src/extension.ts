@@ -100,7 +100,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	session = new EmulatorSession(context.extensionPath, adbPath, emulatorPath, bitRate, output, provider, serial => console.setDevice(serial));
 	const deviceTools = new DeviceTools(adbPath, () => session.deviceSerial, () => provider.postDeviceTools(), message => provider.notify(message, 'error'));
 	provider.setDeviceTools(deviceTools);
-	shutdownExtension = async () => {await provider.cancelUploads(); await stop();};
+	shutdownExtension = () => provider.shutdown();
 	let detectionVersion = 0;
 	const refreshProjectInfo = async () => {
 		const version = ++detectionVersion;
@@ -139,7 +139,7 @@ export function activate(context: vscode.ExtensionContext): void {
 				}
 			}
 		}),
-		vscode.commands.registerCommand('valdroid-emulator.stop', async () => {await shutdownExtension?.(); provider.notify('Disconnected from emulator.', 'info');}),
+		vscode.commands.registerCommand('valdroid-emulator.stop', async () => {await shutdownExtension?.();}),
 		{ dispose: () => { void console.dispose(); void shutdownExtension?.(); } },
 	);
 }

@@ -74,7 +74,7 @@ export function useHostSession() {
 		selectTarget: (value: string) => dispatch({ type: 'select', value }),
 		refreshTargets: React.useCallback(() => vscode.postMessage({ type: 'refresh' }), []),
 		start: () => {if (state.selectedTarget) {vscode.postMessage({ type: 'start', value: state.selectedTarget });}},
-		close: () => vscode.postMessage({ type: 'close' }),
+		close: () => {setLaunch({busy: true, status: 'Shutting down…'}); vscode.postMessage({ type: 'close' });},
 		retry: () => vscode.postMessage({type: 'retry'}),
 		dismissNotice: React.useCallback(() => dispatch({type: 'dismiss-notice'}), []),
 	};

@@ -88,7 +88,7 @@ button[aria-pressed=true]:hover { background: var(--valdroid-primary-hover); }
 .hierarchy-props p { color: var(--vscode-descriptionForeground); }
 .hierarchy-values { display: flex; flex-direction: column; gap: 5px; }
 .hierarchy-tree-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
-.hierarchy-tree { flex: 1; overflow: auto; min-height: 0; min-width: 0; position: relative; scrollbar-gutter: stable; scrollbar-width: auto; }
+.hierarchy-tree { flex: 1; overflow-x: hidden; overflow-y: auto; min-height: 0; min-width: 0; position: relative; scrollbar-gutter: stable; scrollbar-width: auto; }
 .hierarchy-tree::-webkit-scrollbar { width: 10px; height: 0; }
 .hierarchy-tree::-webkit-scrollbar:horizontal { display: none; height: 0; }
 .hierarchy-horizontal-scrollbar { appearance: none; -webkit-appearance: none; display: block; width: 100%; height: 14px; flex: 0 0 14px; margin: 0; padding: 0; border: 0; border-radius: 0; background: var(--vscode-panel-background, #1e1e1e); cursor: default; }
