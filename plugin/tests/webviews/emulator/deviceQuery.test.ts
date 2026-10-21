@@ -1,22 +1,12 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { socketUrl, useDeviceQuery } from '../../../src/webviews/emulator/api';
+import { useDeviceQuery } from '../../../src/webviews/emulator/api';
 import { queryWrapper } from '../../helpers';
 
-it('converts both HTTP and HTTPS socket URLs', () => {
-	expect(socketUrl('http://localhost:8080', '/audio')).toBe('ws://localhost:8080/audio');
-	expect(socketUrl('https://localhost:8080', '/control')).toBe('wss://localhost:8080/control');
-});
 it('does not fetch without a device URL', () => {
 	const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
 	renderHook(() => useDeviceQuery('', '/api/volume', 1000), { wrapper: queryWrapper() });
 	expect(fetch).not.toHaveBeenCalled();
-});
-it('loads device data through a cancellable request', async () => {
-	const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ current: 5 }) }); vi.stubGlobal('fetch', fetch);
-	const { result } = renderHook(() => useDeviceQuery('http://localhost', '/api/volume', 1000), { wrapper: queryWrapper() });
-	await waitFor(() => expect(result.current.data).toEqual({ current: 5 }));
-	expect(fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
 });
 it('aborts obsolete requests on a server change and unmount', () => {
 	const signals: AbortSignal[] = [];

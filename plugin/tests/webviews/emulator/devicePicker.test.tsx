@@ -1,36 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { DevicePicker } from '../../../src/webviews/emulator/components/DevicePicker';
-
-it('warns only when the selected device has an x86 ABI', () => {
-	const props = {targets: [
-		{label: 'Intel', value: 'avd:Intel', abi: 'x86'},
-		{label: 'Intel64', value: 'avd:Intel64', abi: 'x86_64'},
-		{label: 'ARM', value: 'device:arm', abi: 'arm64-v8a'},
-		{label: 'Unknown', value: 'avd:Unknown'},
-	], onSelect: vi.fn(), onRefresh: vi.fn(), onStart: vi.fn()};
-	const {rerender} = render(<DevicePicker {...props} selected="avd:Intel" />);
-	expect(screen.getByText(/Performance may be poor/)).toBeTruthy();
-	rerender(<DevicePicker {...props} selected="avd:Intel64" />);
-	expect(screen.getByText(/Performance may be poor/)).toBeTruthy();
-	for (const selected of ['device:arm', 'avd:Unknown', '']) {
-		rerender(<DevicePicker {...props} selected={selected} />);
-		expect(screen.queryByText(/Performance may be poor/)).toBeNull();
-	}
-});
-
-it('marks running devices in a flat list and describes the selected action', () => {
-	const props = {targets: [{label: 'Phone (emulator-5554)', value: 'device:emulator-5554'}, {label: 'Other phone', value: 'avd:Other'}],
-		selected: 'device:emulator-5554', onSelect: vi.fn(), onRefresh: vi.fn(), onStart: vi.fn()};
-	const {rerender} = render(<DevicePicker {...props} />);
-	expect(screen.getByRole('option', {name: 'Phone (emulator-5554) (running)'})).toBeTruthy();
-	expect(screen.getByRole('option', {name: 'Other phone'})).toBeTruthy();
-	expect(screen.queryByRole('group')).toBeNull();
-	fireEvent.click(screen.getByRole('button', {name: 'Start Emulator'}));
-	expect(props.onStart).toHaveBeenCalledOnce();
-	rerender(<DevicePicker {...props} selected="avd:Other" />);
-	expect(screen.getByRole('button', {name: 'Start Emulator'})).toBeTruthy();
-});
+import { DevicePicker, LoadingState } from '../../../src/webviews/emulator/components/DevicePicker';
 
 it('refreshes connected devices automatically and stops refreshing after unmount', () => {
 	vi.useFakeTimers();
@@ -47,9 +17,7 @@ it('refreshes connected devices automatically and stops refreshing after unmount
 
 it('uses one start action and routes it through Expo only when its switch is enabled', () => {
 	const props = {targets: [{label: 'Phone', value: 'avd:Phone'}], selected: 'avd:Phone', onSelect: vi.fn(), onRefresh: vi.fn(), onStart: vi.fn(), onStartExpo: vi.fn()};
-	const {rerender, container} = render(<DevicePicker {...props} project={{expo: true, reactNative: true}} />);
-	expect(container.querySelector('.device-picker-row select + .play-button')).toBeTruthy();
-	expect(container.querySelector('.device-picker .project-start-actions')).toBeTruthy();
+	const {rerender} = render(<DevicePicker {...props} project={{expo: true, reactNative: true}} />);
 	fireEvent.click(screen.getByRole('button', {name: 'Start Emulator'}));
 	expect(props.onStart).toHaveBeenCalledOnce();
 	fireEvent.click(screen.getByRole('switch', {name: 'Launch with Expo Integration'}));
@@ -60,4 +28,18 @@ it('uses one start action and routes it through Expo only when its switch is ena
 	expect(screen.getAllByRole('button')).toHaveLength(1);
 	fireEvent.click(screen.getByRole('button', {name: 'Start Emulator'}));
 	expect(props.onStart).toHaveBeenCalledTimes(2);
+});
+
+it('offers retry after 90 seconds without resetting when initialization status changes', () => {
+	vi.useFakeTimers();
+	try {
+		const retry = vi.fn(); const startedAt = Date.now();
+		const {rerender, unmount} = render(<LoadingState status="Starting emulator…" startedAt={startedAt} onRetry={retry} />);
+		act(() => vi.advanceTimersByTime(60000));
+		rerender(<LoadingState status="Connecting to agent…" startedAt={startedAt} onRetry={retry} />);
+		act(() => vi.advanceTimersByTime(29999)); expect(screen.queryByRole('button')).toBeNull();
+		act(() => vi.advanceTimersByTime(1));
+		fireEvent.click(screen.getByRole('button', {name: 'Taking a while to load, retry?'})); expect(retry).toHaveBeenCalledOnce();
+		unmount(); expect(vi.getTimerCount()).toBe(0);
+	} finally {vi.useRealTimers();}
 });

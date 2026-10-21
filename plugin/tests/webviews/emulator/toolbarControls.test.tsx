@@ -2,6 +2,8 @@ import {act, fireEvent, render} from '@testing-library/react';
 import {expect, it, vi} from 'vitest';
 import {ToolbarMenus} from '../../../src/webviews/emulator/components/ToolbarMenus';
 import {ToolbarHints} from '../../../src/webviews/emulator/components/ToolbarHints';
+import {CaptureControls} from '../../../src/webviews/emulator/components/CaptureControls';
+import {DebuggerPaused} from '../../../src/webviews/emulator/components/DebuggerPaused';
 
 it('keeps inside clicks open, closes outside clicks, and dismisses with Escape', () => {
 	const view = render(<><ToolbarMenus /><details className="devtools-menu"><summary>Tools</summary><button>Inside</button></details><button>Outside</button></>);
@@ -26,4 +28,24 @@ it('allows only one tool menu at a time and suppresses pending and subsequent hi
 		expect(settings.open).toBe(false); expect(tools.open).toBe(true);
 		view.unmount();
 	} finally {vi.useRealTimers();}
+});
+
+it('expands recording into a timer pill and dispatches Stop', () => {
+	vi.useFakeTimers(); vi.setSystemTime(10000);
+	try {
+		const action = vi.fn(); const view = render(<CaptureControls state={{type: 'device-tools-state', busy: false}} onAction={action} />);
+		fireEvent.click(view.getByLabelText('Record screen')); expect(action).toHaveBeenCalledWith({action: 'record-start'});
+		view.rerender(<CaptureControls state={{type: 'device-tools-state', busy: false, recordingStartedAt: 10000}} onAction={action} />);
+		act(() => {vi.advanceTimersByTime(4000);}); expect(view.getByRole('timer').textContent).toBe('0:04');
+		fireEvent.click(view.getByLabelText('Stop recording and save video')); expect(action).toHaveBeenCalledWith({action: 'record-stop'});
+		view.unmount();
+	} finally {vi.useRealTimers();}
+});
+
+it('offers resume, step over and console inside the paused screen panel', () => {
+	const action = vi.fn();
+	const view = render(<DebuggerPaused onAction={action} />);
+	fireEvent.click(view.getByText('Resume execution')); expect(action).toHaveBeenLastCalledWith('continue');
+	fireEvent.click(view.getByText('Step over')); expect(action).toHaveBeenLastCalledWith('next');
+	fireEvent.click(view.getByText('Open debugger console')); expect(action).toHaveBeenLastCalledWith('console');
 });

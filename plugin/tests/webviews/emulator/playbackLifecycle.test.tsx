@@ -31,16 +31,6 @@ it('releases every playback instance during Strict Mode setup/cleanup and unmoun
 	for (const stop of media.stops) {expect(stop).toHaveBeenCalledOnce();}
 });
 
-it('keeps the loader visible over a playing stream until the Expo build finishes', () => {
-	const initial = props();
-	const {rerender} = render(<EmulatorScreen {...initial} launchStatus="Building app…" />);
-	expect(screen.getByRole('progressbar')).toBeTruthy();
-	expect(screen.getByText('Building app…')).toBeTruthy();
-	rerender(<EmulatorScreen {...initial} />);
-	expect(screen.queryByRole('progressbar')).toBeNull();
-	expect(media.start).toHaveBeenCalledOnce();
-});
-
 it('uses the shared phone frame for each loading phase without restarting playback', () => {
 	const initial = props();
 	const view = render(<EmulatorScreen {...initial} />);

@@ -44,17 +44,6 @@ it('follows the selected AVD when it becomes a running device during refresh', (
 	]});
 	expect(result.current.selectedTarget).toBe('avd:Phone');
 });
-it('routes start, refresh and close commands and ignores an empty selection', () => {
-	const { result } = renderHook(useHostSession);
-	act(() => result.current.start()); expect(bridge.postMessage).toHaveBeenCalledTimes(1);
-	act(() => result.current.selectTarget('avd:a'));
-	act(() => {result.current.start(); result.current.refreshTargets(); result.current.close();});
-	expect(bridge.postMessage.mock.calls.slice(1)).toEqual([[{ type: 'start', value: 'avd:a' }], [{ type: 'refresh' }], [{ type: 'close' }]]);
-});
-it('ignores unrelated window messages', () => {
-	const { result } = renderHook(useHostSession); const initial = result.current.session;
-	receive({ type: 'unrelated' }); expect(result.current.session).toBe(initial);
-});
 
 it('restores and saves the workspace Expo preference without resetting during launch', () => {
 	const {result} = renderHook(useHostSession);

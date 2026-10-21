@@ -1,6 +1,7 @@
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {expect, it, vi} from 'vitest';
 import {ConsoleApp} from '../../../src/webviews/console/ConsoleApp';
+import {bridge} from '../../../src/webviews/console/bridge';
 
 vi.mock('../../../src/webviews/console/bridge', () => ({bridge: {getState: () => undefined, setState: vi.fn(), postMessage: vi.fn()}}));
 vi.mock('@tanstack/react-virtual', () => ({useVirtualizer: () => ({getTotalSize: () => 0, getVirtualItems: () => [], scrollToIndex: vi.fn()})}));
@@ -22,4 +23,11 @@ it('shows structured JS values in their own tab and expands nested values on dem
 	fireEvent.click(screen.getByRole('tab', {name: 'JS Console'}));
 	expect(array.open).toBe(true);
 	expect(object.open).toBe(true);
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'js-snapshot', records: [
+		{id: 2, level: 'log', time: 1, args: [], location: 'App.tsx:12', source: {fileName: '/project/App.tsx', lineNumber: 12, columnNumber: 1}},
+		{id: 3, level: 'log', time: 1, args: [], location: 'library.js:20'},
+	]}})));
+	fireEvent.click(screen.getByRole('button', {name: 'App.tsx:12'}));
+	expect(bridge.postMessage).toHaveBeenCalledWith({type: 'js-open-source', id: 2});
+	expect(screen.getByText('library.js:20').closest('button')).toBeNull();
 });

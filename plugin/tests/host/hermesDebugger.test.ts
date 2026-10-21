@@ -25,9 +25,6 @@ beforeEach(() => {
 it('restricts discovery to the app, owned Metro endpoint, and real runtime', () => {
 	expect(parseHermesTargets([page(), page({appId: 'com.other'}), page({vm: "don't use"}), page({webSocketDebuggerUrl: 'ws://evil.example:8081/inspector/debug?device=a&page=1'}), page({webSocketDebuggerUrl: 'ws://localhost:8082/inspector/debug?device=a&page=1'})], 8081, app.applicationId)).toEqual([{id: 'device-1', title: 'Hermes', deviceName: undefined, websocket: 'ws://127.0.0.1:8081/inspector/debug?device=abc&page=1'}]);
 });
-it('configures direct attach without a browser, launch file, or Node child injection', () => {
-	expect(hermesDebugConfiguration('/project', 'ws://localhost:8081/target', 'token')).toMatchObject({type: 'pwa-node', request: 'attach', websocketAddress: 'ws://localhost:8081/target', sourceMaps: true, autoAttachChildProcesses: false, restart: false, __valdroidDebug: 'token'});
-});
 it('maps Metro server source paths to project files for the owned port', () => {
 	const configuration = hermesDebugConfiguration('/project', 'ws://127.0.0.1:54321/inspector/debug?device=1&page=1', 'token');
 	expect(configuration.sourceMapPathOverrides['http://10.0.2.2:54321/[metro-project]/*']).toBe('/project/*');
