@@ -7,13 +7,15 @@ export interface EmulatorTarget {
 
 export type SessionState = 'idle' | 'online' | 'error';
 export interface ProjectInfo {type: 'project-info'; expo: boolean; reactNative: boolean;}
-export interface LaunchProgress {type: 'launch-progress'; busy: boolean; status: string;}
+export interface LaunchProgress {type: 'launch-progress'; busy: boolean; status: string; error?: import('./metro').MetroFailure;}
 export const lifecycleActions = ['reload', 'restart-app', 'restart-metro', 'clear-metro', 'reinstall', 'rebuild', 'clean-rebuild'] as const;
 export type LifecycleAction = typeof lifecycleActions[number] | 'reconnect-device';
 export type DebuggerAction = 'attach' | 'detach' | 'pause' | 'continue' | 'next' | 'stepIn' | 'stepOut' | 'console';
 export interface DebuggerState {attached: boolean; paused: boolean; busy: boolean; enabled?: boolean;}
 
 export type HostMessage =
+	| {type: 'clipboard-paste'; id: string}
+	| {type: 'metro-error-source'}
 	| ({type: 'device-tools'} & import('./deviceTools').DeviceToolAction)
 	| {type: 'dev-menu'}
 	| {type: 'debugger-preference'; enabled: boolean}
@@ -56,7 +58,7 @@ export interface StatusMessage {
 
 export interface SessionNotice { type: 'notice'; id: number; message: string; level: 'info' | 'error'; }
 export interface DevtoolsState {type: 'devtools'; active: boolean; enabled: boolean; connected: boolean; debugger?: DebuggerState;}
-export type ExtensionMessage = import('./deviceTools').DeviceToolsState | import('./hierarchy').HierarchyHighlight | import('./inspector').InspectorResult | {type: 'expo-preference'; enabled: boolean} | ProjectInfo | LaunchProgress | import('./scan').ScanOutlines | DevtoolsState | StatusMessage | SessionNotice | { type: 'targets'; targets: EmulatorTarget[] } | UploadReply | UploadProgress;
+export type ExtensionMessage = {type: 'clipboard-text'; id: string; text: string} | import('./deviceTools').DeviceToolsState | import('./hierarchy').HierarchyHighlight | import('./inspector').InspectorResult | {type: 'expo-preference'; enabled: boolean} | ProjectInfo | LaunchProgress | import('./scan').ScanOutlines | DevtoolsState | StatusMessage | SessionNotice | { type: 'targets'; targets: EmulatorTarget[] } | UploadReply | UploadProgress;
 
 export interface DisplayState {
 	id: number;

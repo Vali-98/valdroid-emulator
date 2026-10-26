@@ -19,7 +19,7 @@ it('shows structured JS values in their own tab and expands nested values on dem
 	const array = screen.getByText('Array(2)').closest('details')!;
 	act(() => {array.open = true; array.dispatchEvent(new Event('toggle'));});
 	expect(screen.getByText('42')).toBeTruthy();
-	fireEvent.click(screen.getByRole('tab', {name: 'Metro'}));
+	fireEvent.click(screen.getByRole('tab', {name: 'Build'}));
 	fireEvent.click(screen.getByRole('tab', {name: 'JS Console'}));
 	expect(array.open).toBe(true);
 	expect(object.open).toBe(true);

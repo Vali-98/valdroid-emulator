@@ -31,6 +31,9 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 	private expoTarget?: string;
 	setProjectInfo(info: import('../../shared/protocol').ProjectInfo): void {this.projectInfo = info; this.postMessage(info);}
 	setLaunchProgress(status: string): void {if (this.shuttingDown) {return;} this.launchProgress = {type: 'launch-progress', busy: true, status}; this.postMessage(this.launchProgress);}
+	setBundleFailure(error?: import('../../shared/metro').MetroFailure): void {
+		this.launchProgress = {...this.launchProgress, error}; this.postMessage(this.launchProgress);
+	}
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -74,6 +77,19 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 					return;
 				}
 				switch (message.type) {
+					case 'clipboard-paste': {
+						if (typeof message.id !== 'string' || message.id.length > 64 || !this.serverUrl || this.launchProgress.busy) {break;}
+						const server = this.serverUrl;
+						const text = await vscode.env.clipboard.readText();
+						if (Buffer.byteLength(text, 'utf8') > 128 * 1024) {throw new Error('Clipboard text is too large to paste (maximum 128 KB).');}
+						if (server === this.serverUrl && this.view === webviewView) {this.postMessage({type: 'clipboard-text', id: message.id, text});}
+						break;
+					}
+					case 'metro-error-source': {
+						const error = this.launchProgress.error;
+						if (error?.file) {await vscode.window.showTextDocument(vscode.Uri.file(error.file), {selection: new vscode.Range(Math.max(0, (error.line ?? 1) - 1), Math.max(0, (error.column ?? 1) - 1), Math.max(0, (error.line ?? 1) - 1), Math.max(0, (error.column ?? 1) - 1))});}
+						break;
+					}
 					case 'device-tools': if (!this.launchProgress.busy) {await this.deviceTools?.action(message);} break;
 					case 'dev-menu': if (!this.launchProgress.busy) {await this.expo?.devMenu?.();} break;
 					case 'debugger-preference': if (typeof message.enabled === 'boolean') {await this.expo?.debuggerPreference?.(message.enabled); this.postDevtools();} break;
@@ -87,7 +103,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 							if (message.action === 'reconnect-device') {await uploads.cancelAll(); if (!this.reconnectDevice) {throw new Error('Device reconnection is unavailable.');} await this.reconnectDevice();}
 							else {await this.expo?.lifecycle?.(message.action);}
 						}
-						finally {if (!this.shuttingDown) {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}}
+						finally {if (!this.shuttingDown) {this.launchProgress = {...this.launchProgress, busy: false, status: ''}; this.postMessage(this.launchProgress);}}
 						break;
 					case 'inspect-show-hierarchy': await this.expo?.showHierarchy?.(message.id, message.index); break;
 					case 'inspect-point': this.expo?.inspect?.(message); break;
@@ -166,7 +182,7 @@ export class EmulatorViewProvider implements vscode.WebviewViewProvider {
 		this.expoTarget = value;
 		this.setLaunchProgress('Starting Expo session…');
 		try {await this.expo.start(value); this.postDevtools();}
-		finally {if (!this.shuttingDown) {this.launchProgress = {type: 'launch-progress', busy: false, status: ''}; this.postMessage(this.launchProgress);}}
+		finally {if (!this.shuttingDown) {this.launchProgress = {...this.launchProgress, busy: false, status: ''}; this.postMessage(this.launchProgress);}}
 	}
 
 	setServer(serverUrl?: string, deviceName?: string): void {

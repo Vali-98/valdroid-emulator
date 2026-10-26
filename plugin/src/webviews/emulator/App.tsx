@@ -63,6 +63,7 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 			<EmulatorScreen serverUrl={serverUrl} display={display} send={control.send} status={videoStatus} onStatus={reportVideoStatus}
 				debuggerPaused={host.devtools.debugger?.attached && host.devtools.debugger.paused} onDebugger={host.debuggerAction}
 				launchStatus={host.launch.busy ? host.launch.status : undefined}
+				bundleError={host.launch.error}
 				inspector={inspector}
 				scanEnabled={host.devtools.active && host.devtools.enabled}
 				onStats={setVideoStats} attempt={attempt} onRestart={restartVideo} onRetry={onRetry} startedAt={initialized ? undefined : startedAt} />
@@ -86,7 +87,7 @@ export function App() {
 		<Header title="No Emulator Loaded" loaded={false} />
 		<main className="stage stage-idle">
 			<PhoneFrame>
-			{host.launch.busy || host.session.state === 'online' ? <LoadingState status={host.launch.busy ? host.launch.status : host.session.status} startedAt={host.loadingStartedAt} onRetry={host.launch.busy ? undefined : host.retry} /> : <DevicePicker
+			{host.launch.busy || host.launch.error || host.session.state === 'online' ? <LoadingState error={host.launch.error} status={host.launch.busy ? host.launch.status : host.session.status} startedAt={host.loadingStartedAt} onRetry={host.launch.busy ? undefined : host.retry} /> : <DevicePicker
 				targets={host.targets} selected={host.selectedTarget} onSelect={host.selectTarget} onRefresh={host.refreshTargets}
 				onStart={() => {audio.resume(); host.start();}}
 				project={host.project} onStartExpo={host.project.expo ? () => {audio.resume(); host.startExpo();} : undefined}

@@ -55,6 +55,7 @@ export function ConsoleApp() {
 		const receive = (event: MessageEvent<ConsoleMessage>) => {
 			const message = event.data;
 			switch (message.type) {
+				case 'build-complete': setTab(previous => {if (previous !== 'metro') {return previous;} bridge.setState({...bridge.getState(), tab: 'js'}); return 'js';}); break;
 				case 'hierarchy-focus': setHierarchyFocus(previous => ({id: message.id, version: (previous?.version ?? 0) + 1})); setTab('hierarchy'); break;
 				case 'js-snapshot': setJSRecords(message.records); break;
 				case 'js-records': setJSRecords(previous => [...previous, ...message.records].filter(record => record.id >= (message.oldestID ?? 0)).slice(-jsLogLimit)); break;
@@ -84,14 +85,14 @@ export function ConsoleApp() {
 	};
 	return <main className="console-app">
 		{projectTools && <nav className="console-tabs" role="tablist" aria-label="Valdroid logs">
-			{(['logcat', 'metro', 'js', 'hierarchy'] as const).map(value => <button key={value} role="tab" aria-selected={activeTab === value} onClick={() => {setHierarchyFocus(undefined); setTab(value); bridge.setState({...bridge.getState(), tab: value});}}>{value === 'metro' ? 'Metro' : value === 'js' ? 'JS Console' : value === 'hierarchy' ? 'Hierarchy' : 'Logcat'}</button>)}
+			{(['logcat', 'metro', 'js', 'hierarchy'] as const).map(value => <button key={value} role="tab" aria-selected={activeTab === value} onClick={() => {setHierarchyFocus(undefined); setTab(value); bridge.setState({...bridge.getState(), tab: value});}}>{value === 'metro' ? 'Build' : value === 'js' ? 'JS Console' : value === 'hierarchy' ? 'Hierarchy' : 'Logcat'}</button>)}
 		</nav>}
 		{projectTools && <JSConsole records={jsRecords} hidden={activeTab !== 'js'} />}
 		{activeTab === 'hierarchy' && <Suspense fallback={<p className="console-empty">Loading hierarchy…</p>}><Hierarchy focusId={hierarchyFocus?.id} focusVersion={hierarchyFocus?.version} /></Suspense>}
-		{activeTab === 'metro' && <section className="metro-panel" role="tabpanel" aria-label="Metro">
+		{activeTab === 'metro' && <section className="metro-panel" role="tabpanel" aria-label="Build">
 			<header className="console-toolbar"><span>Expo build / Metro</span><div className="console-actions">
-				<button aria-label="Copy Metro logs" onClick={() => bridge.postMessage({type: 'console-copy', text: metroText})}><Copy size={15} /></button>
-				<button aria-label="Clear Metro logs" onClick={() => bridge.postMessage({type: 'metro-clear'})}><Trash2 size={15} /></button>
+				<button aria-label="Copy build logs" onClick={() => bridge.postMessage({type: 'console-copy', text: metroText})}><Copy size={15} /></button>
+				<button aria-label="Clear build logs" onClick={() => bridge.postMessage({type: 'metro-clear'})}><Trash2 size={15} /></button>
 			</div></header>
 			<pre className="metro-log" ref={metroViewport} onScroll={event => {const el = event.currentTarget; metroFollow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;}}>{metroText || 'Start Expo with Emulator to view build and Metro output.'}</pre>
 		</section>}

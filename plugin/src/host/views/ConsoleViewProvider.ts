@@ -39,6 +39,7 @@ export class ConsoleViewProvider implements vscode.WebviewViewProvider {
 	private projectInfo: ProjectInfo = {type: 'project-info', expo: false, reactNative: false};
 	setProjectInfo(info: ProjectInfo): void {this.projectInfo = info; this.post(info);}
 	showMetro(): void {this.metroRequested = true; this.post({type: 'metro-snapshot', text: this.metroText, focus: true});}
+	buildComplete(): void {this.metroRequested = false; this.post({type: 'build-complete'});}
 	appendMetro(text: string): void {
 		this.metroText = (this.metroText + text).slice(-metroLogLimit);
 		this.post({type: 'metro-output', text});

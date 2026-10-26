@@ -33,7 +33,8 @@ function PlaybackCanvas({serverUrl, display, send, onStatus, onStats}: PlaybackP
 		id="screen" aria-label="Android emulator display" draggable={false} tabIndex={0} />;
 }
 
-export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, scanEnabled = false, launchStatus, inspector, debuggerPaused = false, onDebugger, ...playback}: PlaybackProps & {
+export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, scanEnabled = false, launchStatus, bundleError, inspector, debuggerPaused = false, onDebugger, ...playback}: PlaybackProps & {
+	bundleError?: import('../../../shared/metro').MetroFailure;
 	debuggerPaused?: boolean;
 	onDebugger?: (action: import('../../../shared/protocol').DebuggerAction) => void;
 	inspector?: ReturnType<typeof useElementInspector>;
@@ -52,6 +53,6 @@ export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, 
 		<HierarchyHighlight />
 		{debuggerPaused && onDebugger && <DebuggerPaused onAction={onDebugger} />}
 	</div>
-		{(status !== 'Playing' || launchStatus) && <PhoneLoading status={launchStatus ?? status} startedAt={startedAt} onRetry={launchStatus ? undefined : onRetry ?? onRestart} />}
+		{(status !== 'Playing' || launchStatus || bundleError) && <PhoneLoading error={bundleError} status={launchStatus ?? status} startedAt={startedAt} onRetry={launchStatus ? undefined : onRetry ?? onRestart} />}
 	</>;
 }

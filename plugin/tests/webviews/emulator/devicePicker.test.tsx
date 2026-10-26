@@ -1,6 +1,18 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { DevicePicker, LoadingState } from '../../../src/webviews/emulator/components/DevicePicker';
+import {vscode} from '../../../src/webviews/shared/vscode';
+vi.mock('../../../src/webviews/shared/vscode', () => ({vscode: {postMessage: vi.fn()}}));
+
+it('replaces the loading shimmer with a bundle failure, verified source action and immediate JS retry', () => {
+	render(<LoadingState status="Connecting…" error={{message: 'Unexpected token', file: '/project/app.tsx', line: 7}} />);
+	expect(screen.queryByRole('progressbar')).toBeNull();
+	expect(screen.getByRole('alert').textContent).toContain('Unexpected token');
+	fireEvent.click(screen.getByRole('button', {name: 'app.tsx:7'}));
+	expect(vscode.postMessage).toHaveBeenLastCalledWith({type: 'metro-error-source'});
+	fireEvent.click(screen.getByRole('button', {name: 'Retry JS reload'}));
+	expect(vscode.postMessage).toHaveBeenLastCalledWith({type: 'lifecycle', action: 'reload'});
+});
 
 it('refreshes connected devices automatically and stops refreshing after unmount', () => {
 	vi.useFakeTimers();

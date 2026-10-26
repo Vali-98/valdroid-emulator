@@ -370,6 +370,11 @@
 		overflow-wrap: anywhere;
 	}
 	.loading-status { font-size: 16px; line-height: 1.4; }
+	.phone-frame:has(.loading-error) {width: min(calc(100cqw - 24px), 720px); height: min(calc(100cqh - 24px), 800px); aspect-ratio: auto;}
+	.loading.loading-error {padding: 24px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-content: stretch;}
+	.bundle-error {width: 100%; min-height: 0; overflow: auto; text-align: left; font-size: 12px; color: var(--vscode-foreground);}
+	.bundle-error pre {white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: var(--vscode-errorForeground);}
+	.bundle-error-source {background: none; color: var(--vscode-textLink-foreground); text-decoration: underline;}
 	.error-message {
 		color: var(--vscode-errorForeground);
 	}

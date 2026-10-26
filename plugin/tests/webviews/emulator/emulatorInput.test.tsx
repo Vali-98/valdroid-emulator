@@ -1,11 +1,13 @@
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { useEmulatorInput } from '../../../src/webviews/emulator/hooks/useEmulatorInput';
+import {vscode} from '../../../src/webviews/shared/vscode';
+vi.mock('../../../src/webviews/shared/vscode', () => ({vscode: {postMessage: vi.fn()}}));
 
 function mount(send = vi.fn<(command: object) => boolean>(() => true)) {
 	function Screen() {
 		const { imageRef, screenProps } = useEmulatorInput({ id:0, width:1080, height:2400, orientation:0 }, send);
-		return <canvas {...screenProps} ref={imageRef} width={1080} height={2400} />;
+		return <canvas {...screenProps} ref={imageRef} width={1080} height={2400} tabIndex={0} />;
 	}
 	const view = render(<Screen />);
 	const screen = view.container.querySelector('canvas')!;
@@ -18,6 +20,22 @@ function mount(send = vi.fn<(command: object) => boolean>(() => true)) {
 	};
 	return { ...view, send, screen, pointer };
 }
+
+it.each(['ctrlKey', 'metaKey'])('copies host clipboard into Android before pasting with %s, only while the emulator remains focused', modifier => {
+	const {screen, send} = mount(); screen.focus();
+	fireEvent.keyDown(screen, {key: 'v', [modifier]: true});
+	fireEvent.keyUp(screen, {key: 'v', [modifier]: true});
+	expect(send).not.toHaveBeenCalled();
+	const request = vi.mocked(vscode.postMessage).mock.calls.at(-1)![0] as {type: string; id: string};
+	expect(request.type).toBe('clipboard-paste');
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'clipboard-text', id: request.id, text: 'Hello 🌍\nnext line'}})));
+	expect(send).toHaveBeenCalledExactlyOnceWith({type: 'paste', text: 'Hello 🌍\nnext line'});
+	fireEvent.keyDown(screen, {key: 'v', [modifier]: true});
+	const next = vi.mocked(vscode.postMessage).mock.calls.at(-1)![0] as {id: string};
+	screen.blur();
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'clipboard-text', id: next.id, text: 'Do not paste after focus leaves'}})));
+	expect(send).toHaveBeenCalledTimes(1);
+});
 
 it('sends DOWN before focus/capture and maps movement without waiting for render', () => {
 	const { send, screen, pointer } = mount();

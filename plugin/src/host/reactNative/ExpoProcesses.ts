@@ -3,6 +3,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { delay, runFile, waitForExit } from '../session/process';
 import * as path from 'node:path';
 import {readAndroidArtifact} from './AndroidArtifact';
+import {MetroBundleError, type MetroFailure} from '../../shared/metro';
 
 export interface ExpoLifecycleOptions {runner: string; stateFile: string; adbPath: string; serial: string;}
 
@@ -10,6 +11,9 @@ export class ExpoProcesses {
 	private readonly children = new Set<ChildProcess>();
 	private readonly abort = new AbortController();
 	private metro?: ChildProcess;
+	private bundleFailure?: MetroFailure;
+	throwBundleFailure(): void {if (this.bundleFailure) {throw new MetroBundleError(this.bundleFailure.message);}}
+	clearBundleFailure(): void {this.bundleFailure = undefined;}
 	async stopMetro(): Promise<void> {
 		const child = this.metro;
 		if (!child?.pid || child.exitCode !== null || child.signalCode !== null) {return;}
@@ -17,7 +21,7 @@ export class ExpoProcesses {
 		else {process.kill(-child.pid, 'SIGTERM'); await waitForExit(child, 3000); if (child.exitCode === null && child.signalCode === null) {process.kill(-child.pid, 'SIGKILL'); await waitForExit(child, 3000);}}
 		this.metro = undefined;
 	}
-	constructor(private readonly log: (text: string) => void, private readonly onProgress: (status: string) => void = () => undefined, private readonly reporterPreload?: string, private readonly injection?: {preload: string; sessionFile: string}) {}
+	constructor(private readonly log: (text: string) => void, private readonly onProgress: (status: string) => void = () => undefined, private readonly reporterPreload?: string, private readonly injection?: {preload: string; sessionFile: string}, private readonly onBundle: (failure?: MetroFailure) => void = () => undefined) {}
 
 	async start(root: string, cli: string, deviceName: string, port: number, lifecycle: ExpoLifecycleOptions, appReady?: Promise<void>): Promise<void> {
 		this.onProgress('Building…');
@@ -29,19 +33,22 @@ export class ExpoProcesses {
 		this.onProgress('Launching…');
 		await this.launchApp(root, cli, deviceName, port, lifecycle);
 		if (appReady) {
+			this.throwBundleFailure();
 			this.onProgress('Connecting…');
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			let aborted = () => undefined as void;
+			const checkBundle = setInterval(() => {if (this.bundleFailure) {aborted();}}, 100);
 			await new Promise<void>((resolve, reject) => {
-				timer = setTimeout(() => reject(new Error('App did not connect within 90 seconds. See the Metro tab.')), 90000);
-				aborted = () => reject(new Error('Expo startup canceled.'));
+				timer = setTimeout(() => reject(new Error('App did not connect within 90 seconds. See the Build tab.')), 90000);
+				aborted = () => reject(this.bundleFailure ? new MetroBundleError(this.bundleFailure.message) : new Error('Expo startup canceled.'));
 				this.abort.signal.addEventListener('abort', aborted, {once: true});
 				if (this.abort.signal.aborted) {aborted();}
 				void appReady.then(resolve, reject);
 				void metro.done.then(() => reject(new Error('Metro exited before the app connected.')), reject);
-			}).finally(() => {clearTimeout(timer); this.abort.signal.removeEventListener('abort', aborted);});
+			}).finally(() => {clearInterval(checkBundle); clearTimeout(timer); this.abort.signal.removeEventListener('abort', aborted);});
 		}
 		this.abort.signal.throwIfAborted();
+		this.throwBundleFailure();
 		if (metro.child.exitCode !== null || metro.child.signalCode !== null) {throw new Error('Metro exited during app launch.');}
 		this.log('\n[Valdroid] App startup complete. Metro remains running.\n');
 	}
@@ -70,7 +77,7 @@ export class ExpoProcesses {
 		while (Date.now() < deadline) {
 			this.abort.signal.throwIfAborted();
 			if (metroError) {throw metroError;}
-			if (metro.child.exitCode !== null || metro.child.signalCode !== null) {throw new Error('Metro exited before becoming ready. See the Metro tab.');}
+			if (metro.child.exitCode !== null || metro.child.signalCode !== null) {throw new Error('Metro exited before becoming ready. See the Build tab.');}
 			try {
 				const response = await fetch(`http://127.0.0.1:${port}/status`, {signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(1500)])});
 				const body = await response.text();
@@ -83,7 +90,7 @@ export class ExpoProcesses {
 			if (ready) {break;}
 			await delay(400, this.abort.signal);
 		}
-		if (!ready) {throw new Error(`Metro did not become ready within 90 seconds at http://127.0.0.1:${port}/status. Last check: ${lastStatus}. See the Metro tab.`);}
+		if (!ready) {throw new Error(`Metro did not become ready within 90 seconds at http://127.0.0.1:${port}/status. Last check: ${lastStatus}. See the Build tab.`);}
 		this.log('\n[Valdroid] Metro ready.\n');
 		return metro;
 	}
@@ -108,10 +115,20 @@ export class ExpoProcesses {
 		this.abort.signal.throwIfAborted();
 		this.log(`\n[${label}] ${path.basename(executable)} ${args.join(' ')}\n`);
 		const child = spawn(executable, args, {
-			cwd: root, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'],
+			cwd: root, windowsHide: true, detached: process.platform !== 'win32', stdio: label === 'Metro' ? ['ignore', 'pipe', 'pipe', 'ipc'] : ['ignore', 'pipe', 'pipe'],
 			env,
 		});
 		this.children.add(child);
+		if (label === 'Metro') {child.on('message', (event: unknown) => {
+			if (!event || typeof event !== 'object') {return;}
+			const value = event as Record<string, unknown>;
+			if (value.type === 'valdroid-bundle-ready') {this.bundleFailure = undefined; this.onBundle();}
+			if (value.type !== 'valdroid-bundle-error' || typeof value.message !== 'string') {return;}
+			this.bundleFailure = {message: value.message.slice(0, 12000), file: typeof value.file === 'string' ? value.file : undefined,
+				line: Number.isSafeInteger(value.line) && Number(value.line) > 0 ? Number(value.line) : undefined,
+				column: Number.isSafeInteger(value.column) && Number(value.column) >= 0 ? Number(value.column) + 1 : undefined};
+			this.onBundle(this.bundleFailure);
+		});}
 		for (const stream of [child.stdout, child.stderr]) {
 			const decoder = new StringDecoder('utf8');
 			stream?.on('data', data => this.log(decoder.write(data)));
@@ -122,7 +139,7 @@ export class ExpoProcesses {
 			child.once('close', (code, signal) => {
 				this.children.delete(child);
 				this.log(`\n[${label}] exited (${signal ?? code})\n`);
-				if (code === 0) {resolve();} else {reject(new Error(`${label} exited (${signal ?? code}). See the Metro tab.`));}
+				if (code === 0) {resolve();} else {reject(new Error(`${label} exited (${signal ?? code}). See the Build tab.`));}
 			});
 		});
 		return {child, done};

@@ -2,6 +2,7 @@ import { Play } from 'lucide-react';
 import * as React from 'react';
 import type { EmulatorTarget } from '../../../shared/protocol';
 import {Switch} from './Switch';
+import {vscode} from '../../shared/vscode';
 
 export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, onStartExpo, project, error, launchWithExpo: savedLaunchWithExpo, onLaunchWithExpoChange }: {
 	launchWithExpo?: boolean;
@@ -44,16 +45,22 @@ export function DevicePicker({ targets, selected, onSelect, onRefresh, onStart, 
 	</div>;
 }
 
-export function LoadingState({ status, startedAt, onRetry }: { status: string; startedAt?: number; onRetry?: () => void }) {
+export function LoadingState({ status, startedAt, onRetry, error }: { status: string; startedAt?: number; onRetry?: () => void; error?: import('../../../shared/metro').MetroFailure }) {
 	const [canRetry, setCanRetry] = React.useState(false);
 	React.useEffect(() => {
 		setCanRetry(false);
 		const timer = window.setTimeout(() => setCanRetry(true), Math.max(0, 90000 - (Date.now() - (startedAt ?? Date.now()))));
 		return () => window.clearTimeout(timer);
 	}, [startedAt]);
-	return <div className="loading" role="status">
-		<div className="loading-bar" role="progressbar" aria-label="Initializing emulator" />
-		<div className="loading-status">{status}</div>
-		{canRetry && onRetry && <button type="button" className="loading-retry" onClick={onRetry}>Taking a while to load, retry?</button>}
+	return <div className={`loading${error ? ' loading-error' : ''}`} role="status">
+		{!error && <div className="loading-bar" role="progressbar" aria-label="Initializing emulator" />}
+		<div className="loading-status">{error ? 'JavaScript bundle failed' : status}</div>
+		{error && <div className="bundle-error" role="alert">
+			<pre>{error.message}</pre>
+			{error.file && <button className="bundle-error-source" onClick={() => vscode.postMessage({type: 'metro-error-source'})}>{error.file.split(/[\\/]/).pop()}:{error.line ?? 1}</button>}
+			<p>Fix the error and save. Metro is still running.</p>
+			<button className="loading-retry" onClick={() => vscode.postMessage({type: 'lifecycle', action: 'reload'})}>Retry JS reload</button>
+		</div>}
+		{!error && canRetry && onRetry && <button type="button" className="loading-retry" onClick={onRetry}>Taking a while to load, retry?</button>}
 	</div>;
 }

@@ -29,7 +29,16 @@ export function activate(context: vscode.ExtensionContext): void {
 	let session: EmulatorSession;
 	let startingExpo = false;
 	let debuggingEnabled = context.workspaceState.get<boolean>('valdroid.debuggingEnabled', true);
-	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records), result => provider.postInspection(result), context.globalStorageUri.fsPath, snapshot => console.postHierarchy(snapshot), highlight => provider.postHierarchyHighlight(highlight));
+	const metroDiagnostics = vscode.languages.createDiagnosticCollection('Valdroid Metro');
+	context.subscriptions.push(metroDiagnostics);
+	const expo = new ExpoSession(context.extensionPath, adbPath, text => console.appendMetro(text), batch => provider.postOutlines(batch), status => provider.setLaunchProgress(status), records => console.appendJS(records), result => provider.postInspection(result), context.globalStorageUri.fsPath, snapshot => console.postHierarchy(snapshot), highlight => provider.postHierarchyHighlight(highlight), failure => {
+		provider.setBundleFailure(failure); metroDiagnostics.clear();
+		if (failure?.file) {
+			const line = Math.max(0, (failure.line ?? 1) - 1), column = Math.max(0, (failure.column ?? 1) - 1);
+			const diagnostic = new vscode.Diagnostic(new vscode.Range(line, column, line, column + 1), failure.message, vscode.DiagnosticSeverity.Error);
+			diagnostic.source = 'Metro'; metroDiagnostics.set(vscode.Uri.file(failure.file), [diagnostic]);
+		}
+	});
 	const debuggerBridge = new HermesDebugger(() => expo.debugApp(), text => console.appendMetro(text), () => provider.postDevtools(), context.logUri.fsPath);
 	expo.beforeStop = () => debuggerBridge.detach();
 	context.subscriptions.push(debuggerBridge);
@@ -62,6 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
 					if (!serial) {throw new Error('No connected Android device.');}
 					provider.setLaunchProgress('Starting Metro…');
 					await expo.start(folder.uri.fsPath, serial);
+					console.buildComplete();
 					await autoAttach();
 				} finally {startingExpo = false;}
 			},
@@ -80,6 +90,7 @@ export function activate(context: vscode.ExtensionContext): void {
 				if (action === 'clean-rebuild' && await vscode.window.showWarningMessage('Clean Gradle build outputs and rebuild? App data and native source files are retained.', {modal: true}, 'Clean rebuild') !== 'Clean rebuild') {return;}
 				await debuggerBridge.detach();
 				await expo.lifecycle(action);
+				if (action === 'rebuild' || action === 'clean-rebuild') {console.buildComplete();}
 				await autoAttach();
 			},
 			inspect: request => expo.inspect(request),

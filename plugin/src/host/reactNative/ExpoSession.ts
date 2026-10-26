@@ -14,6 +14,7 @@ import {parseJSLogs, type JSLog} from '../../shared/jsConsole';
 import {parseInspectorResult, type InspectorRequest, type InspectorResult} from '../../shared/inspector';
 import {resolveInspectorElements, localInspectorSource} from './inspectorSource';
 import {MetroInjection} from './MetroInjection';
+import {MetroBundleError, type MetroFailure} from '../../shared/metro';
 import {JSLogSources} from './JSLogSources';
 import {parseHierarchySnapshot, parseHierarchyHighlight, validHierarchyId, type HierarchyControl, type HierarchySnapshot, type HierarchyHighlight} from '../../shared/hierarchy';
 
@@ -34,12 +35,22 @@ export class ExpoSession {
 	private reloadRequested = false;
 	private logSources?: JSLogSources;
 	private jsDelivery: Promise<void> = Promise.resolve();
+	private bundleVersion = 0;
+	private receiveBundle(root: string, failure?: MetroFailure): void {
+		const version = ++this.bundleVersion;
+		this.onBundle(failure ? {message: failure.message} : undefined);
+		if (failure?.file) {void localInspectorSource(root, {fileName: failure.file, lineNumber: failure.line ?? 1, columnNumber: failure.column ?? 1}).then(source => {
+			if (version === this.bundleVersion && source) {this.onBundle({...failure, file: source.fileName});}
+		}).catch(() => undefined);}
+	}
 	async lifecycle(action: LifecycleAction): Promise<void> {
 		if (action === 'reconnect-device') {throw new Error('Device reconnection must use the emulator session.');}
 		if (!lifecycleActions.includes(action) || !this.project || !this.processes || !this.serial || !this.metroPort || !this.injection) {throw new Error('Start an Expo session first.');}
 		if (this.lifecycleBusy) {throw new Error('Another lifecycle action is running.');}
 		this.lifecycleBusy = true;
 		const root = this.project.root, serial = this.serial, port = this.metroPort, processes = this.processes;
+		processes.clearBundleFailure();
+		this.receiveBundle(root);
 		this.logSources = new JSLogSources(root, port);
 		const cli = path.join(root, 'node_modules', 'expo', 'bin', 'cli');
 		const options = {runner: path.join(this.extensionPath, 'dist', 'expo-lifecycle.cjs'), stateFile: path.join(this.injection.directory, 'android-build.json'), adbPath: this.adbPath, serial};
@@ -47,7 +58,14 @@ export class ExpoSession {
 			this.log(`\n[Valdroid] ${action}\n`);
 			this.onProgress({'reload': 'Reloading JS…', 'restart-app': 'Restarting app…', 'restart-metro': 'Restarting Metro…', 'clear-metro': 'Clearing Metro cache…', reinstall: 'Reinstalling app…', rebuild: 'Rebuilding app…', 'clean-rebuild': 'Clean rebuilding app…'}[action]);
 			if (action === 'reload') {
-				if (!this.state.connected) {throw new Error('The app is not connected. Restart the app instead.');}
+				if (!this.state.connected) {
+					this.onProgress('Launching…');
+					const artifact = await readAndroidArtifact(options.stateFile, root, serial, port);
+					await runFile(this.adbPath, ['-s', serial, 'shell', 'am', 'force-stop', artifact.applicationId]);
+					this.connectedAt = 0;
+					await processes.launchApp(root, cli, await resolveExpoDeviceName(this.adbPath, serial), port, options);
+					await this.waitForConnection(processes); return;
+				}
 				this.connectedAt = 0;
 				this.reloadRequested = true;
 				await this.waitForConnection(processes);
@@ -77,11 +95,13 @@ export class ExpoSession {
 		} finally {this.lifecycleBusy = false;}
 	}
 	private async waitForConnection(processes: ExpoProcesses): Promise<void> {
+		processes.throwBundleFailure();
 		this.onProgress('Connecting…');
 		const deadline = Date.now() + 90000;
 		while (!this.connectedAt) {
+			processes.throwBundleFailure();
 			if (this.processes !== processes || this.stopping) {throw new Error('Expo session stopped.');}
-			if (Date.now() > deadline) {throw new Error('App did not reconnect within 90 seconds. See the Metro tab.');}
+			if (Date.now() > deadline) {throw new Error('App did not reconnect within 90 seconds. See the Build tab.');}
 			await delay(200);
 		}
 	}
@@ -96,7 +116,7 @@ export class ExpoSession {
 	private inspectResult?: InspectorResult;
 	private injection?: MetroInjection;
 	private hierarchy: HierarchyControl = {active: false, version: 0};
-	constructor(private readonly extensionPath: string, private readonly adbPath: string, private readonly log: (text: string) => void = () => undefined, private readonly onOutlines: (batch: ScanOutlines) => void = () => undefined, private readonly onProgress: (status: string) => void = () => undefined, private readonly onJSLogs: (records: Omit<JSLog, 'id'>[]) => void = () => undefined, private readonly onInspection: (result: InspectorResult) => void = () => undefined, private readonly storagePath: string = path.join(os.tmpdir(), 'valdroid-metro'), private readonly onHierarchy: (snapshot: HierarchySnapshot) => void = () => undefined, private readonly onHierarchyHighlight: (highlight: HierarchyHighlight) => void = () => undefined) {}
+	constructor(private readonly extensionPath: string, private readonly adbPath: string, private readonly log: (text: string) => void = () => undefined, private readonly onOutlines: (batch: ScanOutlines) => void = () => undefined, private readonly onProgress: (status: string) => void = () => undefined, private readonly onJSLogs: (records: Omit<JSLog, 'id'>[]) => void = () => undefined, private readonly onInspection: (result: InspectorResult) => void = () => undefined, private readonly storagePath: string = path.join(os.tmpdir(), 'valdroid-metro'), private readonly onHierarchy: (snapshot: HierarchySnapshot) => void = () => undefined, private readonly onHierarchyHighlight: (highlight: HierarchyHighlight) => void = () => undefined, private readonly onBundle: (failure?: MetroFailure) => void = () => undefined) {}
 
 	async start(root: string, serial: string): Promise<void> {
 		await this.stop();
@@ -175,9 +195,9 @@ export class ExpoSession {
 			await runFile(this.adbPath, ['-s', serial, 'reverse', `tcp:${metroPort}`, `tcp:${metroPort}`]);
 			this.metroPort = metroPort;
 			this.logSources = new JSLogSources(root, metroPort);
-			this.processes = new ExpoProcesses(this.log, this.onProgress, path.join(this.extensionPath, 'dist', 'expo-reporter.cjs'), {preload: path.join(this.extensionPath, 'dist', 'metroPreload.cjs'), sessionFile: this.injection.sessionFile});
+			this.processes = new ExpoProcesses(this.log, this.onProgress, path.join(this.extensionPath, 'dist', 'expo-reporter.cjs'), {preload: path.join(this.extensionPath, 'dist', 'metroPreload.cjs'), sessionFile: this.injection.sessionFile}, failure => this.receiveBundle(root, failure));
 			await this.processes.start(root, path.join(root, 'node_modules', 'expo', 'bin', 'cli'), deviceName, metroPort, {runner: path.join(this.extensionPath, 'dist', 'expo-lifecycle.cjs'), stateFile: path.join(this.injection.directory, 'android-build.json'), adbPath: this.adbPath, serial}, appReady);
-		} catch (error) {this.log(`\n[Valdroid] Expo startup failed: ${String(error)}\n`); await this.stop(); throw error;}
+		} catch (error) {this.log(`\n[Valdroid] Expo startup failed: ${String(error)}\n`); if (!(error instanceof MetroBundleError)) {await this.stop();} throw error;}
 	}
 
 	setScan(enabled: boolean): void {
@@ -236,6 +256,7 @@ export class ExpoSession {
 	private async stopResources(): Promise<void> {
 		await this.beforeStop?.().catch(error => this.log(`[Valdroid] Debugger detach during shutdown: ${String(error)}\n`));
 		await this.processes?.stop(); this.processes = undefined;
+		this.bundleVersion++; this.onBundle();
 		this.enabled = false; this.connectedAt = 0;
 		this.reloadRequested = false;
 		this.inspectRequest = undefined; this.inspectResult = undefined;

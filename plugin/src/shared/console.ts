@@ -27,6 +27,7 @@ export type ConsoleRequest =
 	| { type: 'console-ready' | 'console-clear' | 'console-toggle' | 'console-cancel' | 'console-copy'; text?: string }
 	| { type: 'console-command'; command: string };
 export type ConsoleMessage =
+	| {type: 'build-complete'}
 	| import('./hierarchy').HierarchySnapshot
 	| {type: 'hierarchy-focus'; id: string}
 	| {type: 'js-snapshot' | 'js-records'; records: import('./jsConsole').JSLog[]; oldestID?: number}

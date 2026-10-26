@@ -16,6 +16,25 @@ function children(count: number) {
 }
 const ready = () => vi.stubGlobal('fetch', vi.fn(async () => ({ok: true, status: 200, text: async () => 'packager-status:running'})));
 
+it('interrupts app startup on a bundle error but keeps Metro available for recovery', async () => {
+	const [build, install, metro, launch] = children(4); ready();
+	const onBundle = vi.fn();
+	const processes = new ExpoProcesses(() => undefined, () => undefined, undefined, undefined, onBundle);
+	const starting = processes.start('/project', '/project/cli', 'Phone', 8087, lifecycle, new Promise(() => undefined));
+	const rejected = expect(starting).rejects.toThrow('Unexpected token');
+	build.emit('close', 0, null);
+	await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2)); install.emit('close', 0, null);
+	await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(4)); launch.emit('close', 0, null);
+	metro.emit('message', {type: 'valdroid-bundle-error', message: 'Unexpected token', file: '/project/app.tsx', line: 3, column: 2});
+	await rejected;
+	expect(metro.exitCode).toBeNull();
+	expect(onBundle).toHaveBeenCalledWith({message: 'Unexpected token', file: '/project/app.tsx', line: 3, column: 3});
+	metro.emit('message', {type: 'valdroid-bundle-ready'});
+	expect(() => processes.throwBundleFailure()).not.toThrow();
+	expect(onBundle).toHaveBeenLastCalledWith();
+	await processes.stop();
+});
+
 it('requests cache reset only for an explicit Metro cache reset', async () => {
 	children(1); ready();
 	const processes = new ExpoProcesses(() => undefined);

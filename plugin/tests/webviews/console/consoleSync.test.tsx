@@ -41,21 +41,26 @@ it('retains Metro output while switching tabs and accepts a restored host snapsh
 	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'project-info', expo: true, reactNative: true}})));
 	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'metro-snapshot', text: 'previous build\n'}})));
 	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'metro-output', text: 'Metro ready\n'}})));
-	fireEvent.click(screen.getByRole('tab', {name: 'Metro'}));
-	expect(screen.getByRole('tabpanel', {name: 'Metro'}).textContent).toContain('previous build\nMetro ready');
+	fireEvent.click(screen.getByRole('tab', {name: 'Build'}));
+	expect(screen.getByRole('tabpanel', {name: 'Build'}).textContent).toContain('previous build\nMetro ready');
 	fireEvent.click(screen.getByRole('tab', {name: 'Logcat'}));
-	fireEvent.click(screen.getByRole('tab', {name: 'Metro'}));
-	expect(screen.getByRole('tabpanel', {name: 'Metro'}).textContent).toContain('previous build\nMetro ready');
+	fireEvent.click(screen.getByRole('tab', {name: 'Build'}));
+	expect(screen.getByRole('tabpanel', {name: 'Build'}).textContent).toContain('previous build\nMetro ready');
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'build-complete'}})));
+	expect(screen.getByRole('tab', {name: 'JS Console'}).getAttribute('aria-selected')).toBe('true');
+	fireEvent.click(screen.getByRole('tab', {name: 'Logcat'}));
+	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'build-complete'}})));
+	expect(screen.getByRole('tab', {name: 'Logcat'}).getAttribute('aria-selected')).toBe('true');
 });
 
 it('shows no tab bar in generic projects, even if Metro was previously selected', () => {
 	render(<ConsoleApp />);
 	expect(screen.queryByRole('tablist')).toBeNull();
 	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'project-info', expo: true, reactNative: true}})));
-	fireEvent.click(screen.getByRole('tab', {name: 'Metro'}));
+	fireEvent.click(screen.getByRole('tab', {name: 'Build'}));
 	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'project-info', expo: false, reactNative: false}})));
 	expect(screen.queryByRole('tablist')).toBeNull();
-	expect(screen.queryByRole('tabpanel', {name: 'Metro'})).toBeNull();
+	expect(screen.queryByRole('tabpanel', {name: 'Build'})).toBeNull();
 	expect(screen.getByRole('textbox', {name: 'ADB command'})).toBeTruthy();
 });
 

@@ -12,6 +12,45 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func TestPasteSetsClipboardBeforePasteKeyAndStopsSync(t *testing.T) {
+	text := "Hello 🌍\nnext line"
+	packet, err := encodeInputCommand(inputCommand{Type: "paste", Text: text})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := bytes.NewReader(packet)
+	readInt := func() uint64 {
+		value, err := binary.ReadUvarint(reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	if readInt() != 10 || readInt() != 128*1024 || readInt() != uint64(len(text)) {
+		t.Fatal("invalid clipboard header")
+	}
+	content := make([]byte, len(text))
+	if _, err := reader.Read(content); err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != text || readInt() != 11 {
+		t.Fatal("clipboard text or sync stop mismatch")
+	}
+	for _, action := range []uint64{0, 1} {
+		if readInt() != 2 || readInt() != action || readInt() != 279 || readInt() != 0 {
+			t.Fatal("invalid paste key sequence")
+		}
+	}
+	if reader.Len() != 0 {
+		t.Fatal("unexpected trailing bytes")
+	}
+	for _, invalid := range []string{"", strings.Repeat("x", 128*1024+1), string([]byte{0xff})} {
+		if _, err := encodeInputCommand(inputCommand{Type: "paste", Text: invalid}); err == nil {
+			t.Fatal("accepted invalid clipboard")
+		}
+	}
+}
+
 func TestParseVideoPacketHeaderWireLayout(t *testing.T) {
 	data := make([]byte, videoHeaderSize)
 	binary.LittleEndian.PutUint32(data[0:4], 0)

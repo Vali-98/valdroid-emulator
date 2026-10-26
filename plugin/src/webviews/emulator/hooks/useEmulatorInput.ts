@@ -1,9 +1,23 @@
 import * as React from 'react';
 import type { DisplayState } from '../../../shared/protocol';
 import { androidKeyCode, mapScreenPoint, metaState } from '../input/input';
+import {vscode} from '../../shared/vscode';
 
 export function useEmulatorInput(display: DisplayState, send: (command: object) => boolean) {
 	const imageRef = React.useRef<HTMLCanvasElement>(null);
+	const pasteRequest = React.useRef<string | undefined>(undefined);
+	const paste = React.useEffectEvent((event: MessageEvent) => {
+		if (event.data?.type !== 'clipboard-text' || !pasteRequest.current || event.data.id !== pasteRequest.current) {return;}
+		pasteRequest.current = undefined;
+		if (document.activeElement === imageRef.current && typeof event.data.text === 'string' && event.data.text) {send({type: 'paste', text: event.data.text});}
+	});
+	React.useEffect(() => {
+		const receive = (event: MessageEvent) => paste(event);
+		const cancel = () => {pasteRequest.current = undefined;};
+		window.addEventListener('message', receive);
+		window.addEventListener('blur', cancel);
+		return () => {cancel(); window.removeEventListener('message', receive); window.removeEventListener('blur', cancel);};
+	}, []);
 	const pointerIdRef = React.useRef<number | null>(null);
 	const rawInputRef = React.useRef(false);
 	const lastPointRef = React.useRef<{x: number; y: number} | null>(null);
@@ -44,6 +58,11 @@ export function useEmulatorInput(display: DisplayState, send: (command: object) 
 		};
 	}, []);
 	const sendKey = (event: React.KeyboardEvent, action: number) => {
+		if (event.key.toLowerCase() === 'v' && (event.ctrlKey || event.metaKey) && !event.altKey) {
+			event.preventDefault();
+			if (action === 0 && !event.repeat) {pasteRequest.current = crypto.randomUUID(); vscode.postMessage({type: 'clipboard-paste', id: pasteRequest.current});}
+			return;
+		}
 		const keyCode = androidKeyCode(event.key);
 		if (keyCode && send({ type: 'key', action, keyCode, metaState: metaState(event) })) {event.preventDefault();}
 	};
@@ -71,6 +90,12 @@ export function useEmulatorInput(display: DisplayState, send: (command: object) 
 		},
 		onKeyDown: event => sendKey(event, 0),
 		onKeyUp: event => sendKey(event, 1),
+		onBlur: () => {pasteRequest.current = undefined;},
+		onPaste: event => {
+			event.preventDefault(); pasteRequest.current = undefined;
+			const text = event.clipboardData.getData('text/plain');
+			if (text) {send({type: 'paste', text});}
+		},
 		onContextMenu: event => event.preventDefault(),
 	};
 	return { imageRef, screenProps };

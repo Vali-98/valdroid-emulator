@@ -35,7 +35,7 @@ export function useHostSession() {
 	const [deviceTools, setDeviceTools] = React.useState<import('../../../shared/deviceTools').DeviceToolsState>({type: 'device-tools-state', busy: false});
 	const [launchWithExpo, setLaunchWithExpo] = React.useState(false);
 	const [project, setProject] = React.useState({expo: false, reactNative: false});
-	const [launch, setLaunch] = React.useState({busy: false, status: ''});
+	const [launch, setLaunch] = React.useState<{busy: boolean; status: string; error?: import('../../../shared/metro').MetroFailure}>({busy: false, status: ''});
 	const [devtools, setDevtools] = React.useState<DevtoolsState>({type: 'devtools', active: false, enabled: false, connected: false});
 	const [state, dispatch] = React.useReducer(reducer, {
 		targets: [], selectedTarget: '', session: { type: 'status', state: 'idle', status: 'Select an emulator' },

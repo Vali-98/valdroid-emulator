@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 type motionPointer struct {
@@ -37,6 +38,7 @@ type inputCommand struct {
 	MetaState    uint32          `json:"metaState"`
 	RequestID    string          `json:"requestId,omitempty"`
 	Orientation  int32           `json:"orientation"`
+	Text         string          `json:"text"`
 }
 
 var (
@@ -59,6 +61,23 @@ func appendControlInt(buffer []byte, value int32) []byte {
 func encodeInputCommand(command inputCommand) ([]byte, error) {
 	var message []byte
 	switch command.Type {
+	case "paste":
+		if len(command.Text) == 0 || len(command.Text) > 128*1024 || !utf8.ValidString(command.Text) {
+			return nil, errors.New("paste requires valid UTF-8 text of at most 128 KB")
+		}
+		// Set the actual Android clipboard before injecting KEYCODE_PASTE. Stop
+		// synchronization immediately: host clipboard reads are explicit, not continuous.
+		message = appendControlInt(message, 10)
+		message = appendControlInt(message, 128*1024)
+		message = appendLEB128(message, uint32(len(command.Text)))
+		message = append(message, []byte(command.Text)...)
+		message = appendControlInt(message, 11)
+		for _, action := range []int32{0, 1} {
+			message = appendControlInt(message, 2)
+			message = appendControlInt(message, action)
+			message = appendControlInt(message, 279)
+			message = appendLEB128(message, 0)
+		}
 	case "motion":
 		if len(command.Pointers) > 2 {
 			return nil, errors.New("agent accepts at most two pointers")
@@ -143,7 +162,8 @@ func controlWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
-	conn.SetReadLimit(64 * 1024)
+	// A 128 KB clipboard can expand sixfold when JSON escapes control characters.
+	conn.SetReadLimit(1024 * 1024)
 	queue := newInputQueue()
 	stopShutdown := context.AfterFunc(r.Context(), func() { queue.close(); _ = conn.Close() })
 	defer stopShutdown()
