@@ -17,7 +17,7 @@ import {useElementInspector} from './components/ElementInspector';
 import {ToolbarHints} from './components/ToolbarHints';
 import {ToolbarMenus} from './components/ToolbarMenus';
 import {DeviceSettings} from './components/DeviceSettings';
-import {PhoneFrame} from './components/PhoneFrame';
+import {PhoneFrame, phoneDimensions} from './components/PhoneFrame';
 
 const initialDisplay: DisplayState = { id: 0, width: 0, height: 0, orientation: 0 };
 
@@ -58,6 +58,7 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 			devtools={host.devtools} onToggleScan={host.toggleScan}
 			onToggleDebug={() => setDebugVisible(value => !value)} onClose={onClose} />
 		<main className="stage">
+			<div className="emulator-device-group" style={phoneDimensions(display)}>
 			<DeviceRail onKey={control.sendDeviceKey} busy={host.deviceTools.busy || host.launch.busy} onRotate={direction => control.send({type: 'orientation', orientation: (display.orientation + (direction === 'left' ? 1 : 3)) % 4})} />
 			<DeviceSettings state={{...host.deviceTools, busy: host.deviceTools.busy || host.launch.busy}} onAction={host.deviceAction} />
 			<EmulatorScreen serverUrl={serverUrl} display={display} send={control.send} status={videoStatus} onStatus={reportVideoStatus}
@@ -67,6 +68,7 @@ function EmulatorWorkspace({ serverUrl, session, audio, onClose, onRetry, starte
 				inspector={inspector}
 				scanEnabled={host.devtools.active && host.devtools.enabled}
 				onStats={setVideoStats} attempt={attempt} onRestart={restartVideo} onRetry={onRetry} startedAt={initialized ? undefined : startedAt} />
+			</div>
 			<TransferFeedback dragging={fileDrop.dragging} notice={notice ?? fileDrop.notice} onDismiss={notice ? onDismissNotice : fileDrop.dismissNotice} />
 		</main>
 		{debugVisible && <StatusBar status={control.status} state={session.state} display={display} audio={audio}

@@ -11,6 +11,13 @@ it('shows structured JS values in their own tab and expands nested values on dem
 	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'project-info', expo: true, reactNative: true}})));
 	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'js-snapshot', records: [{id: 1, level: 'log', time: Date.now(), args: [{type: 'object', preview: 'Object', entries: [{key: 'items', value: {type: 'array', preview: 'Array(2)', entries: [{key: '0', value: {type: 'number', preview: '42'}}]}}]}]}]}})));
 	fireEvent.click(screen.getByRole('tab', {name: 'JS Console'}));
+	expect(screen.getByRole('button', {name: 'Follow JS logs'}).getAttribute('aria-pressed')).toBe('true');
+	const logs = screen.getByRole('log', {name: 'JavaScript logs'});
+	Object.defineProperty(logs, 'scrollHeight', {value: 1000, configurable: true});
+	fireEvent.click(screen.getByRole('tab', {name: 'Build'}));
+	logs.scrollTop = 0;
+	fireEvent.click(screen.getByRole('tab', {name: 'JS Console'}));
+	expect(logs.scrollTop).toBe(1000);
 	expect(screen.queryByText('items:')).toBeNull();
 	const object = screen.getByText('Object').closest('details')!;
 	act(() => {object.open = true; object.dispatchEvent(new Event('toggle'));});

@@ -2,6 +2,14 @@ import { StrictMode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { EmulatorScreen } from '../../../src/webviews/emulator/components/EmulatorScreen';
+import {phoneDimensions} from '../../../src/webviews/emulator/components/PhoneFrame';
+
+it('sizes loading and video consistently for the actual device, rotation and portrait-locked apps', () => {
+	const display = {id: 0, width: 1080, height: 2400, orientation: 0};
+	expect(phoneDimensions(display)).toEqual({'--phone-ratio': 1080 / 2400, '--phone-inverse-ratio': 2400 / 1080});
+	expect(phoneDimensions({...display, orientation: 1})).toEqual({'--phone-ratio': 2400 / 1080, '--phone-inverse-ratio': 1080 / 2400});
+	expect(phoneDimensions({...display, orientation: 1, orientationCorrection: 1})).toEqual(phoneDimensions(display));
+});
 
 const media = vi.hoisted(() => ({start: vi.fn(), stops: [] as Array<ReturnType<typeof vi.fn>>}));
 vi.mock('../../../src/webviews/emulator/media/avcVideo', () => ({startAVCVideo: media.start}));

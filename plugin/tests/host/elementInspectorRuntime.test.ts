@@ -48,3 +48,18 @@ it('also supports older renderers exposing inspector methods at top level', asyn
 	r.hook.onCommitFiberRoot(1, r.root);
 	expect(parseInspectorResult(await inspect({id: 1, x: 0.5, y: 0.5}))?.elements[0].name).toBe('Card');
 });
+
+it('hit-tests a modal native surface before the underlying app even in the same React root', async () => {
+	const r = runtime();
+	const modal = {measureInWindow: (callback: (...args: number[]) => void) => callback(0, 0, 400, 760)};
+	const app = r.root.current.child.stateNode.canonical.publicInstance;
+	const modalFiber = {tag: 5, type: 'RCTModalHostView', child: {tag: 5, stateNode: {canonical: {publicInstance: modal}}}};
+	Object.assign(r.root.current.child, {child: modalFiber});
+	const inspect = r.installElementInspector(); r.hook.onCommitFiberRoot(1, r.root);
+	await inspect({id: 1, x: 0.5, y: 0.5});
+	expect(r.hitTest.mock.calls[0][0]).toBe(modal);
+	expect(r.hitTest).toHaveBeenCalledOnce();
+	Object.assign(r.root.current.child, {child: null});
+	await inspect({id: 2, x: 0.5, y: 0.5});
+	expect(r.hitTest.mock.calls[1][0]).toBe(app);
+});

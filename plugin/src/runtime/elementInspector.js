@@ -2,6 +2,30 @@ import {Dimensions, Platform, StatusBar} from 'react-native';
 import {createHierarchy} from './hierarchy';
 
 const hostInstance = fiber => fiber?.stateNode?.canonical?.publicInstance ?? fiber?.stateNode?.canonical ?? fiber?.stateNode;
+function inspectionHosts(root) {
+  const queue = [{fiber: root.current, surface: false}];
+  const surfaces = [];
+  let appHost;
+  for (let visited = 0; queue.length && visited < 10000; visited++) {
+    const {fiber, surface} = queue.pop();
+    if (!fiber || (fiber.tag === 22 && fiber.memoizedState !== null)) continue;
+    const instance = hostInstance(fiber);
+    const name = fiber.type?.displayName ?? fiber.type?.name ?? fiber.type;
+    const nativeName = fiber.stateNode?.canonical?.viewConfig?.uiViewClassName ?? fiber.type?.__INTERNAL_VIEW_CONFIG?.uiViewClassName;
+    const modal = /ModalHostView/.test(String(nativeName ?? name ?? ''));
+    const host = fiber.tag === 5 && typeof instance?.measureInWindow === 'function';
+    if (host && !modal) {
+      if (surface) surfaces.push(instance);
+      else if (!appHost) appHost = instance;
+    }
+    const children = [];
+    for (let child = fiber.child; child; child = child.sibling) children.push(child);
+    // A Modal's native window is not a descendant of the app's native root.
+    // Hit-test the first measurable child of each surface, topmost/nested first.
+    for (const child of children.reverse()) queue.push({fiber: child, surface: modal || fiber.tag === 4 || (surface && !host)});
+  }
+  return [...surfaces.reverse(), ...(appHost ? [appHost] : [])];
+}
 export function inspectorTopInset() {
   const screen = Dimensions.get('screen');
   const window = Dimensions.get('window');
@@ -40,16 +64,7 @@ export function installElementInspector() {
         if (typeof inspector.getInspectorDataForViewAtPoint !== 'function') continue;
         const mounted = roots.get(id) ?? hook.getFiberRoots?.(id) ?? [];
         for (const root of [...mounted].reverse()) {
-          const queue = [root.current];
-          let host;
-          for (let visited = 0; queue.length && visited < 2000; visited++) {
-            const fiber = queue.pop();
-            if (fiber?.tag === 5 && typeof hostInstance(fiber)?.measureInWindow === 'function') {host = hostInstance(fiber); break;}
-            const children = [];
-            for (let child = fiber?.child; child; child = child.sibling) children.push(child);
-            queue.push(...children.reverse());
-          }
-          if (!host) continue;
+          for (const host of inspectionHosts(root)) {
           const top = inspectorTopInset();
           const data = await new Promise((resolve, reject) => {
             const timer = setTimeout(() => reject(new Error('Native view inspection timed out.')), 1200);
@@ -79,6 +94,7 @@ export function installElementInspector() {
           }
           if (!result.elements.length) result.elements = data.hierarchy.slice(-10).reverse().map(item => ({name: String(item.name ?? 'Component').slice(0, 200)}));
           return result;
+          }
         }
       }
       result.error = 'No React component at this position.';

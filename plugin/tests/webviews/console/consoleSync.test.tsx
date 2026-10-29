@@ -42,6 +42,12 @@ it('retains Metro output while switching tabs and accepts a restored host snapsh
 	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'metro-snapshot', text: 'previous build\n'}})));
 	act(() => window.dispatchEvent(new MessageEvent('message', {data: {type: 'metro-output', text: 'Metro ready\n'}})));
 	fireEvent.click(screen.getByRole('tab', {name: 'Build'}));
+	expect(screen.getByRole('button', {name: 'Follow build logs'}).getAttribute('aria-pressed')).toBe('true');
+	const logs = document.querySelector('.metro-log') as HTMLElement;
+	Object.defineProperty(logs, 'scrollHeight', {value: 1000, configurable: true});
+	fireEvent.click(screen.getByRole('button', {name: 'Follow build logs'}));
+	fireEvent.click(screen.getByRole('button', {name: 'Follow build logs'}));
+	expect(logs.scrollTop).toBe(1000);
 	expect(screen.getByRole('tabpanel', {name: 'Build'}).textContent).toContain('previous build\nMetro ready');
 	fireEvent.click(screen.getByRole('tab', {name: 'Logcat'}));
 	fireEvent.click(screen.getByRole('tab', {name: 'Build'}));

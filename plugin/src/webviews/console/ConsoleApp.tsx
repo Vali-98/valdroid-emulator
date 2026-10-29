@@ -30,11 +30,11 @@ export function ConsoleApp() {
 	const [hierarchyFocus, setHierarchyFocus] = useState<{id: string; version: number}>();
 	const activeTab = projectTools ? tab : 'logcat';
 	const metroViewport = useRef<HTMLPreElement>(null);
-	const metroFollow = useRef(true);
+	const [metroFollow, setMetroFollow] = useState(true);
 	useEffect(() => {
 		const element = metroViewport.current;
-		if (element && metroFollow.current) {element.scrollTop = element.scrollHeight;}
-	}, [metroText, tab]);
+		if (element && metroFollow) {element.scrollTop = element.scrollHeight;}
+	}, [metroText, tab, metroFollow]);
 	const [records, setRecords] = useState<ConsoleRecord[]>([]);
 	const [state, setState] = useState<ConsoleState>({ streaming: false, busy: false, packages: [], processes: {} });
 	const [preferences, setPreferences] = useState(() => {
@@ -91,10 +91,11 @@ export function ConsoleApp() {
 		{activeTab === 'hierarchy' && <Suspense fallback={<p className="console-empty">Loading hierarchy…</p>}><Hierarchy focusId={hierarchyFocus?.id} focusVersion={hierarchyFocus?.version} /></Suspense>}
 		{activeTab === 'metro' && <section className="metro-panel" role="tabpanel" aria-label="Build">
 			<header className="console-toolbar"><span>Expo build / Metro</span><div className="console-actions">
+				<button title="Follow latest" aria-label="Follow build logs" aria-pressed={metroFollow} onClick={() => setMetroFollow(value => !value)}><ArrowDownToLine size={15} /></button>
 				<button aria-label="Copy build logs" onClick={() => bridge.postMessage({type: 'console-copy', text: metroText})}><Copy size={15} /></button>
 				<button aria-label="Clear build logs" onClick={() => bridge.postMessage({type: 'metro-clear'})}><Trash2 size={15} /></button>
 			</div></header>
-			<pre className="metro-log" ref={metroViewport} onScroll={event => {const el = event.currentTarget; metroFollow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;}}>{metroText || 'Start Expo with Emulator to view build and Metro output.'}</pre>
+			<pre className="metro-log" ref={metroViewport} onWheel={event => {if (event.deltaY < 0) {setMetroFollow(false);}}} onScroll={event => {const el = event.currentTarget; setMetroFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 40);}}>{metroText || 'Start Expo with Emulator to view build and Metro output.'}</pre>
 		</section>}
 		<div className="logcat-panel" hidden={activeTab !== 'logcat'}>
 		<header className="console-toolbar">

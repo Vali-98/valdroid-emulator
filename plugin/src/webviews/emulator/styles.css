@@ -144,6 +144,7 @@
 		background: var(--vscode-toolbar-hoverBackground);
 	}
 	.stage {
+		container-type: size;
 		min-height: 0;
 		min-width: 0;
 		position: relative;
@@ -151,7 +152,11 @@
 	}
 	.screen-frame {
 		position: absolute;
-		inset: 4px 40px;
+		left: 0;
+		top: 50%;
+		transform: translateY(-50%);
+		width: min(calc(100cqw - 48px), calc((100cqh - 8px) * var(--phone-ratio)));
+		height: min(calc(100cqh - 8px), calc((100cqw - 48px) * var(--phone-inverse-ratio)));
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -159,6 +164,17 @@
 		border-radius: 8px;
 		background: transparent;
 	}
+	.emulator-device-group {
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		transform: translate(-50%, -50%);
+		width: calc(min(calc(100cqw - 48px), calc((100cqh - 8px) * var(--phone-ratio))) + 44px);
+		height: min(calc(100cqh - 8px), calc((100cqw - 48px) * var(--phone-inverse-ratio)));
+	}
+	.emulator-device-group > .device-rail {right: 0; top: calc(50% - 20px); max-height: calc(100% - 44px);}
+	.emulator-device-group > .device-settings {right: 2px; bottom: 0;}
+	.emulator-device-group:has(.loading-error) {width: 100%; height: 100%;}
 	.device-rail {
 		position: absolute;
 		z-index: 1;
@@ -400,12 +416,14 @@
 		to { transform: rotate(360deg); }
 	}
 
-	.stage-idle, .phone-loading-layer { container-type: size; display: grid; place-items: center; }
-	.phone-loading-layer { position: absolute; inset: 0; z-index: 3; background: var(--vscode-sideBar-background); }
+	.stage-idle {container-type: size;}
+	.stage-idle, .phone-loading-layer { display: grid; place-items: center; }
+	.phone-loading-layer { position: absolute; inset: 0; z-index: 3; background: var(--vscode-sideBar-background); justify-items: start; --phone-gutter: 48px; }
+	.phone-loading-layer:has(.loading-error) {justify-items: center;}
 	.phone-frame {
 		position: relative;
-		width: min(calc(100cqw - 24px), calc((100cqh - 24px) * 9 / 19.5));
-		aspect-ratio: 9 / 19.5;
+		width: min(calc(100cqw - var(--phone-gutter, 24px)), calc((100cqh - 8px) * var(--phone-ratio)));
+		height: min(calc(100cqh - 8px), calc((100cqw - var(--phone-gutter, 24px)) * var(--phone-inverse-ratio)));
 		min-width: 0;
 		overflow: hidden;
 		border: 1px solid #252525;

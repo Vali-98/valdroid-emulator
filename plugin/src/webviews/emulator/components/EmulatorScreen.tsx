@@ -2,7 +2,7 @@ import * as React from 'react';
 import type { DisplayState } from '../../../shared/protocol';
 import { startAVCVideo, type VideoStats } from '../media/avcVideo';
 import { useEmulatorInput } from '../hooks/useEmulatorInput';
-import { PhoneLoading } from './PhoneFrame';
+import { PhoneLoading, phoneDimensions } from './PhoneFrame';
 import { vscode } from '../../shared/vscode';
 import { ScanOverlay } from './ScanOverlay';
 import {InspectorOverlay, type useElementInspector} from './ElementInspector';
@@ -46,13 +46,13 @@ export function EmulatorScreen({status, attempt, onRestart, startedAt, onRetry, 
 	startedAt?: number;
 	onRetry?: () => void;
 }) {
-	return <><div className={`screen-frame ${inspector?.selecting ? 'inspector-selecting' : ''}`} {...inspector?.screenProps}>
+	return <><div className={`screen-frame ${inspector?.selecting ? 'inspector-selecting' : ''}`} style={phoneDimensions(playback.display)} {...inspector?.screenProps}>
 		<PlaybackCanvas key={attempt} {...playback} />
 		<ScanOverlay enabled={scanEnabled} />
 		{inspector && <InspectorOverlay inspector={inspector} />}
 		<HierarchyHighlight />
 		{debuggerPaused && onDebugger && <DebuggerPaused onAction={onDebugger} />}
 	</div>
-		{(status !== 'Playing' || launchStatus || bundleError) && <PhoneLoading error={bundleError} status={launchStatus ?? status} startedAt={startedAt} onRetry={launchStatus ? undefined : onRetry ?? onRestart} />}
+		{(status !== 'Playing' || launchStatus || bundleError) && <PhoneLoading display={playback.display} error={bundleError} status={launchStatus ?? status} startedAt={startedAt} onRetry={launchStatus ? undefined : onRetry ?? onRestart} />}
 	</>;
 }
