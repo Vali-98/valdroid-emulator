@@ -8,19 +8,21 @@ function installMetroIntegration(sessionFile, cli) {
   const session = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
   const fromProject = createRequire(cli);
   let loader;
+  let loaderPath;
   let method;
   // New Expo owns config loading; older versions delegate to metro-config.
   const expoRoot = path.dirname(fromProject.resolve('@expo/metro-config/package.json'));
   const expoLoader = path.join(expoRoot, 'build/config/loadUserConfig.js');
   if (fs.existsSync(expoLoader)) {
-    loader = fromProject(expoLoader); method = 'loadUserConfig';
+    loaderPath = expoLoader; method = 'loadUserConfig';
   } else {
     const metroIndex = fromProject.resolve('metro-config');
-    loader = fromProject(path.join(path.dirname(metroIndex), 'loadConfig.js')); method = 'loadConfig';
+    loaderPath = path.join(path.dirname(metroIndex), 'loadConfig.js'); method = 'loadConfig';
   }
+  loader = fromProject(loaderPath);
   const original = loader[method];
   if (typeof original !== 'function') throw new Error('This Expo version does not expose a compatible Metro config loader.');
-  loader[method] = async function(...args) {
+  const wrappedLoader = async function(...args) {
     const config = await original.apply(this, args);
     const {resolveEntryPoint} = fromProject('@expo/config/paths');
     const entryPath = fs.realpathSync(resolveEntryPoint(session.root, {platform: 'android'}));
@@ -28,6 +30,20 @@ function installMetroIntegration(sessionFile, cli) {
     process.stderr.write('[Valdroid] Metro runtime injection enabled; project files are unchanged.\n');
     return wrapped;
   };
+  const descriptor = Object.getOwnPropertyDescriptor(loader, method);
+  if (descriptor?.writable) {
+    loader[method] = wrappedLoader;
+  } else {
+    // SDK 58 emits non-configurable getter exports. Leave those exports intact
+    // and replace this one module's cached namespace before CLI consumers load it.
+    // Preserve all other export descriptors rather than patching Node's global loader.
+    const cached = fromProject.cache[fromProject.resolve(loaderPath)];
+    if (!cached) throw new Error('Cannot install Valdroid into this Metro config loader.');
+    cached.exports = Object.create(Object.getPrototypeOf(loader), {
+      ...Object.getOwnPropertyDescriptors(loader),
+      [method]: {value: wrappedLoader, enumerable: descriptor?.enumerable ?? true, writable: true, configurable: true},
+    });
+  }
 }
 
 function wrapMetroConfig(config, session, integrationPath) {

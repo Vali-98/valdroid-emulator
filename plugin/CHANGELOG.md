@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.5
+
+- Fix Metro startup with Expo SDK 58's getter-only configuration loader exports.
+
 ## v0.2.3
 
 - Fix Expo SDK 58 build and launch initialization by passing the development mode to Expo's environment loader.

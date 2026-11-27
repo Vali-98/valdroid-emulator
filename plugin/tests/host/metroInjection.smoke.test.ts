@@ -45,10 +45,10 @@ it.skipIf(!expoProject)('bundles the injected adapter with real Expo/Metro and l
 		const dev = await Metro.runBuild(config, {entry: 'index.js', platform: 'android', dev: true, minify: false});
 		expect(dev.code).toContain('valdroid-smoke-token');
 		expect(dev.code).toContain('__VALDROID_TEST_ENTRY__');
-		const {TraceMap, originalPositionFor} = fromProject('@jridgewell/trace-mapping');
+		const {AnyMap, originalPositionFor} = fromProject('@jridgewell/trace-mapping');
 		const prefix = dev.code.slice(0, dev.code.indexOf('globalThis.__VALDROID_TEST_ENTRY__'));
 		const lines = prefix.split('\n');
-		const source = originalPositionFor(new TraceMap(dev.map), {line: lines.length, column: lines.at(-1)!.length});
+		const source = originalPositionFor(new AnyMap(dev.map), {line: lines.length, column: lines.at(-1)!.length});
 		expect(source.source).toBe(path.join(root, 'index.js'));
 		expect(source.line).toBe(2);
 		const release = await Metro.runBuild(config, {entry: 'index.js', platform: 'android', dev: false, minify: false});

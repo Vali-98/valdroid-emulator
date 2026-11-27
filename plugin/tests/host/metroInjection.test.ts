@@ -74,20 +74,30 @@ it('does not inject release, web, server, or non-entry transforms, and salts cac
 	expect(transformer.getCacheKey()).not.toBe(createTransformer({...f, controlURL: 'http://localhost/new-session'}).getCacheKey());
 });
 
-it('wraps the actual config-loader export after it has loaded the user configuration', async () => {
+it.each([false, true])('wraps the config loader while preserving user settings (getter-only export: %s)', async getterOnly => {
 	const f = await fixture();
 	const expoRoot = path.join(f.root, 'node_modules/@expo/metro-config');
 	await fs.mkdir(path.join(expoRoot, 'build/config'), {recursive: true});
 	await fs.writeFile(path.join(expoRoot, 'package.json'), JSON.stringify({name: '@expo/metro-config', main: 'index.js'}));
-	await fs.writeFile(path.join(expoRoot, 'build/config/loadUserConfig.js'), `exports.loadUserConfig = async () => ({projectRoot: ${JSON.stringify(f.root)}, transformer: {babelTransformerPath: ${JSON.stringify(f.originalTransformer)}}, serializer: {userSetting: true}});`);
+	const loaderPath = path.join(expoRoot, 'build/config/loadUserConfig.js');
+	await fs.writeFile(loaderPath, `const loadUserConfig = async () => ({projectRoot: ${JSON.stringify(f.root)}, transformer: {babelTransformerPath: ${JSON.stringify(f.originalTransformer)}}, serializer: {userSetting: true}});
+		Object.defineProperty(exports, 'otherExport', {enumerable: true, get: () => 42});
+		${getterOnly ? "Object.defineProperty(exports, 'loadUserConfig', {enumerable: true, get: () => loadUserConfig});" : 'exports.loadUserConfig = loadUserConfig;'}
+	`);
 	const configRoot = path.join(f.root, 'node_modules/@expo/config');
 	await fs.mkdir(configRoot, {recursive: true});
 	await fs.writeFile(path.join(configRoot, 'paths.js'), `exports.resolveEntryPoint = () => ${JSON.stringify(f.entryPath)};`);
 	const sessionFile = path.join(path.dirname(f.runtimePath), 'session.json');
 	await fs.writeFile(sessionFile, JSON.stringify(f));
 	const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+	const originalNamespace = require(loaderPath);
+	const originalLoader = originalNamespace.loadUserConfig;
 	installMetroIntegration(sessionFile, path.join(f.root, 'cli.js'));
-	const config = await require(path.join(expoRoot, 'build/config/loadUserConfig.js')).loadUserConfig();
+	const installed = require(loaderPath);
+	expect(installed.otherExport).toBe(42);
+	expect(Object.getOwnPropertyDescriptor(installed, 'otherExport')?.get).toBe(Object.getOwnPropertyDescriptor(originalNamespace, 'otherExport')?.get);
+	if (getterOnly) {expect(originalNamespace.loadUserConfig).toBe(originalLoader);}
+	const config = await installed.loadUserConfig();
 	expect(config.serializer.userSetting).toBe(true);
 	expect(config.transformer.babelTransformerPath).toBe(path.join(path.dirname(f.runtimePath), 'transformer.cjs'));
 	expect(stderr).toHaveBeenCalledWith(expect.stringContaining('project files are unchanged'));
