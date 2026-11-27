@@ -31,8 +31,8 @@ async function runPhase(phase, stateFile, root, cli, deviceName, serial, port) {
   const fromProject = createRequire(cli);
   const cliRoot = path.dirname(fromProject.resolve('@expo/cli/package.json'));
   const load = relative => fromProject(path.join(cliRoot, 'build/src', relative));
-  const {setNodeEnv, loadEnvFiles} = load('utils/nodeEnv.js');
-  setNodeEnv('development'); loadEnvFiles(root);
+  const {loadEnvFiles} = load('utils/nodeEnv.js');
+  loadEnvFiles(root, {mode: 'development'});
   const {resolveDeviceAsync} = load('run/android/resolveDevice.js');
   const device = await resolveDeviceAsync(deviceName);
   if (device.identifier !== serial) throw new Error(`Expo selected ${device.identifier}, expected ${serial}. Refusing to use another device.`);
